@@ -296,5 +296,4 @@ $phpString += "`n?>"
 
 # Zapisywanie do pliku
 $phpString | Out-File -FilePath "$PSScriptRoot\hw-$ServiceTag.php" -Encoding UTF8
-#$phpString | Out-File -FilePath "$PSScriptRoot\hw-laptops.php" -Encoding UTF8 -Append
 $phpString | Out-File -FilePath "$PSScriptRoot\BI_ONE.php" -Encoding UTF8 -Append
