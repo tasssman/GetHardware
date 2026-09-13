@@ -280,6 +280,46 @@ function Resolve-ServiceTag {
     }
 }
 
+function Get-ProcessorClockSpeedMhz {
+    param([Parameter(Mandatory)][object[]]$Processors)
+
+    $SpeedsFromName = foreach ($Processor in $Processors) {
+        $Name = ([string]$Processor.Name).Trim()
+        $Match = [regex]::Match(
+            $Name,
+            '@\s*(?<value>\d+(?:[\.,]\d+)?)\s*(?<unit>GHz|MHz)\b',
+            [Text.RegularExpressions.RegexOptions]::IgnoreCase
+        )
+        if (-not $Match.Success) { continue }
+
+        $NumericValue = 0.0
+        $NormalizedValue = $Match.Groups['value'].Value.Replace(',', '.')
+        if (-not [double]::TryParse(
+            $NormalizedValue,
+            [Globalization.NumberStyles]::AllowDecimalPoint,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [ref]$NumericValue
+        )) {
+            continue
+        }
+
+        if ($Match.Groups['unit'].Value -ieq 'GHz') {
+            $NumericValue *= 1000
+        }
+        [int][math]::Round($NumericValue, 0, [MidpointRounding]::AwayFromZero)
+    }
+
+    if (@($SpeedsFromName).Count -gt 0) {
+        return [int](($SpeedsFromName | Measure-Object -Maximum).Maximum)
+    }
+
+    $FallbackSpeed = [int](($Processors | Measure-Object -Property MaxClockSpeed -Maximum).Maximum)
+    if ($FallbackSpeed -le 0) {
+        throw 'Nie udało się ustalić taktowania procesora ani z jego nazwy, ani z MaxClockSpeed.'
+    }
+    return $FallbackSpeed
+}
+
 function Get-SystemOverview {
     Write-Section -Title 'Odczyt danych komputera'
 
@@ -329,7 +369,7 @@ function Get-SystemOverview {
     }
 
     $CoreCount = [int](($Processors | Measure-Object -Property NumberOfCores -Sum).Sum)
-    $ClockSpeed = [int](($Processors | Measure-Object -Property MaxClockSpeed -Maximum).Maximum)
+    $ClockSpeedMhz = Get-ProcessorClockSpeedMhz -Processors $Processors
     $ProcessorNames = @($Processors | ForEach-Object { ([string]$_.Name).Trim() } | Select-Object -Unique)
 
     $ServiceTag = ''
@@ -343,7 +383,7 @@ function Get-SystemOverview {
         Manufacturer   = ([string]$ComputerSystem.Manufacturer).Trim()
         Processor      = ($ProcessorNames -join ' / ')
         CoreCount      = $CoreCount
-        MaxClockSpeed  = $ClockSpeed
+        ClockSpeedMhz  = $ClockSpeedMhz
         BaseBoardManufacturer = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Manufacturer).Trim() } else { '' }
         BaseBoardProduct      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Product).Trim() } else { '' }
         BaseBoardVersion      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Version).Trim() } else { '' }
@@ -595,7 +635,7 @@ function Show-HardwareParts {
         [Parameter(Mandatory)][string]$ComputerModel,
         [Parameter(Mandatory)][string]$Processor,
         [Parameter(Mandatory)][int]$CoreCount,
-        [Parameter(Mandatory)][int]$MaxClockSpeed,
+        [Parameter(Mandatory)][int]$ClockSpeedMhz,
         [Parameter(Mandatory)][string]$Mainboard
     )
 
@@ -606,7 +646,7 @@ function Show-HardwareParts {
     Write-Section -Title 'Procesor'
     Write-Host "Model:               $Processor"
     Write-Host "Rdzenie fizyczne:     $CoreCount"
-    Write-Host "Maks. taktowanie:     $MaxClockSpeed MHz"
+    Write-Host "Taktowanie (mhz):     $ClockSpeedMhz"
 
     Write-Section -Title 'Płyta główna'
     Write-Host $Mainboard
@@ -661,7 +701,7 @@ function Review-HardwareParts {
         [Parameter(Mandatory)][string]$ComputerModel,
         [Parameter(Mandatory)][string]$Processor,
         [Parameter(Mandatory)][int]$CoreCount,
-        [Parameter(Mandatory)][int]$MaxClockSpeed,
+        [Parameter(Mandatory)][int]$ClockSpeedMhz,
         [Parameter(Mandatory)][string]$Mainboard
     )
 
@@ -673,7 +713,7 @@ function Review-HardwareParts {
             -ComputerModel $ComputerModel `
             -Processor $Processor `
             -CoreCount $CoreCount `
-            -MaxClockSpeed $MaxClockSpeed `
+            -ClockSpeedMhz $ClockSpeedMhz `
             -Mainboard $Mainboard
         Write-Host '[1] Zaakceptuj listę'
         Write-Host '[2] Edytuj wybrany element'
@@ -850,7 +890,7 @@ function New-PhpRecordBody {
     $Lines.Add(",'label'=>'$(ConvertTo-PhpSingleQuotedValue $Inventory.Label)'")
     $Lines.Add(",'proc'=>'$(ConvertTo-PhpSingleQuotedValue $Inventory.Processor)'")
     $Lines.Add(",'xcCores'=>$($Inventory.CoreCount)")
-    $Lines.Add(",'mhz'=>$($Inventory.MaxClockSpeed)")
+    $Lines.Add(",'mhz'=>$($Inventory.ClockSpeedMhz)")
     $Lines.Add(",'mainb'=>'$(ConvertTo-PhpSingleQuotedValue $Inventory.Mainboard)'")
     $Lines.Add(",'powerx'=>'$($Inventory.PowerMaxW)'")
     $Lines.Add(",'power'=>'$($Inventory.PowerW)'")
@@ -1055,7 +1095,7 @@ function Invoke-HardwareInventory {
             -ComputerModel $System.Model `
             -Processor $System.Processor `
             -CoreCount $System.CoreCount `
-            -MaxClockSpeed $System.MaxClockSpeed `
+            -ClockSpeedMhz $System.ClockSpeedMhz `
             -Mainboard $Mainboard
         if ($Review.Action -eq 'Accept') {
             $Parts = @($Review.Parts)
@@ -1078,7 +1118,7 @@ function Invoke-HardwareInventory {
             Label         = $Manual.Label
             Processor     = $System.Processor
             CoreCount     = $System.CoreCount
-            MaxClockSpeed = $System.MaxClockSpeed
+            ClockSpeedMhz = $System.ClockSpeedMhz
             Mainboard     = $Mainboard
             PowerMaxW     = [int]$ModelEntry.powerMaxW
             PowerW        = [int]$ModelEntry.powerW
@@ -1107,7 +1147,7 @@ function Invoke-HardwareInventory {
                 -ComputerModel $System.Model `
                 -Processor $System.Processor `
                 -CoreCount $System.CoreCount `
-                -MaxClockSpeed $System.MaxClockSpeed `
+                -ClockSpeedMhz $System.ClockSpeedMhz `
                 -Mainboard $Mainboard
             if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             if ($Review.Action -eq 'Refresh') {
@@ -1118,7 +1158,7 @@ function Invoke-HardwareInventory {
                     -ComputerModel $System.Model `
                     -Processor $System.Processor `
                     -CoreCount $System.CoreCount `
-                    -MaxClockSpeed $System.MaxClockSpeed `
+                    -ClockSpeedMhz $System.ClockSpeedMhz `
                     -Mainboard $Mainboard
                 if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             }

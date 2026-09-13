@@ -22,15 +22,17 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Przy braku produktu skrypt proponuje `baseboardFallback` z JSON-u i pozwala go zatwierdzić lub zmienić.
   - Numer seryjny, status i pozostałe pola techniczne nie są wyświetlane ani zapisywane.
 
-- [ ] Rozszerzyć informacje o procesorze.
-  - Zebrać fizyczne rdzenie i logiczne procesory/wątki.
-  - Rozważyć odczyt `CurrentClockSpeed`, `SocketDesignation`, `ProcessorId` i `Manufacturer`.
-  - Do `xcCores` nadal zapisywać sumę fizycznych rdzeni, o ile format importu nie zostanie zmieniony.
+- [x] Ustalić zakres informacji o procesorze zapisywanych do PHP.
+  - Do `proc` zapisywać nazwę procesora.
+  - Do `xcCores` zapisywać sumę fizycznych rdzeni.
+  - Nie zbierać liczby wątków, `CurrentClockSpeed`, `SocketDesignation`, `ProcessorId` ani producenta procesora, ponieważ nie są zapisywane w obecnym formacie PHP.
 
-- [ ] Ustalić jednoznaczne znaczenie pola `mhz`.
-  - Zdecydować, czy zapisywać `MaxClockSpeed`, `CurrentClockSpeed`, czy taktowanie bazowe wynikające z nazwy/specyfikacji procesora.
-  - Pamiętać, że `CurrentClockSpeed` zmienia się zależnie od obciążenia i trybu oszczędzania energii.
-  - Wyjaśnić pochodzenie przykładowej wartości `1804` dla procesora i7-1185G7.
+- [x] Ustalić jednoznaczne znaczenie pola `mhz`.
+  - Najpierw odczytywać częstotliwość występującą po znaku `@` w nazwie procesora.
+  - Przeliczać GHz na MHz, np. `3.00GHz` na `3000`.
+  - Jeśli nazwa nie zawiera częstotliwości, używać `MaxClockSpeed`.
+  - Nie używać zmiennego `CurrentClockSpeed` i nie odejmować sztucznie `1 MHz`.
+  - Przykładowa wartość `1804` wynikała ze starego działania `MaxClockSpeed - 1` i nie była wiarygodną specyfikacją procesora.
 
 - [ ] Odczytywać typ obudowy z `Win32_SystemEnclosure.ChassisTypes`.
   - Użyć go jako dodatkowej kontroli `deviceType` z `hardware-models.json`.

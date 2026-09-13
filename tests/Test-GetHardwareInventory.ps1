@@ -31,6 +31,16 @@ $GenericParts.Add((New-HardwarePart -Type 'RAM' -Description '16GB' -Connection 
 $ConvertedParts = $GenericParts.ToArray()
 Assert-True -Condition ($ConvertedParts.Count -eq 1) -Message 'A generic hardware list should convert to an object array.'
 
+$ClockFromGhzName = Get-ProcessorClockSpeedMhz -Processors @(
+    [pscustomobject]@{ Name = '11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz'; MaxClockSpeed = 1805 }
+)
+Assert-True -Condition ($ClockFromGhzName -eq 3000) -Message 'The processor frequency in GHz should be read from its name and converted to MHz.'
+
+$ClockFromWmiFallback = Get-ProcessorClockSpeedMhz -Processors @(
+    [pscustomobject]@{ Name = 'Intel(R) Core(TM) Ultra Test'; MaxClockSpeed = 2100 }
+)
+Assert-True -Condition ($ClockFromWmiFallback -eq 2100) -Message 'MaxClockSpeed should be used when the processor name has no frequency.'
+
 $script:FailedCimClass = $null
 
 function Get-PnpDevice { return @() }
@@ -164,7 +174,7 @@ $Inventory = [pscustomobject]@{
     Label         = 'W10P'
     Processor     = "Intel test's CPU"
     CoreCount     = 4
-    MaxClockSpeed = 1804
+    ClockSpeedMhz = 3000
     Mainboard     = 'Latitude 7420'
     PowerMaxW     = 65
     PowerW        = 45
@@ -182,6 +192,7 @@ $Parts = @(
 $Body = New-PhpRecordBody -Inventory $Inventory -Parts $Parts
 Assert-True -Condition ($Body.Contains("addComp('13QJ7D3_laptop',`$C,`$partsLapt);")) -Message 'The addComp call should contain the laptop suffix and three arguments.'
 Assert-True -Condition ($Body.Contains("Intel test\'s CPU")) -Message 'Apostrophes should be escaped for PHP.'
+Assert-True -Condition ($Body.Contains(",'mhz'=>3000")) -Message 'The resolved processor frequency should be written to mhz.'
 Assert-True -Condition ($Body.Contains("'sn'=>'D03C1FD5C7D0'")) -Message 'Optional component serial numbers should be rendered.'
 
 $DevicePhp = New-DevicePhp -Body $Body
