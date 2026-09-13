@@ -31,6 +31,8 @@ $GenericParts.Add((New-HardwarePart -Type 'RAM' -Description '16GB' -Connection 
 $ConvertedParts = $GenericParts.ToArray()
 Assert-True -Condition ($ConvertedParts.Count -eq 1) -Message 'A generic hardware list should convert to an object array.'
 
+$script:FailedCimClass = $null
+
 function Get-PnpDevice { return @() }
 function Get-CimInstance {
     param(
@@ -39,7 +41,27 @@ function Get-CimInstance {
         $ErrorAction
     )
 
+    if ($ClassName -eq $script:FailedCimClass) {
+        throw "Mocked CIM failure: $ClassName"
+    }
+
     switch ($ClassName) {
+        'Win32_ComputerSystem' {
+            return [pscustomobject]@{
+                Model        = 'Latitude 7420'
+                Manufacturer = 'Dell Inc.'
+            }
+        }
+        'Win32_BIOS' {
+            return [pscustomobject]@{ SerialNumber = '13QJ7D3' }
+        }
+        'Win32_Processor' {
+            return [pscustomobject]@{
+                Name          = 'Test CPU'
+                NumberOfCores = 4
+                MaxClockSpeed = 3000
+            }
+        }
         'WmiMonitorBasicDisplayParams' { return @() }
         'WmiMonitorID' { return @() }
         'Win32_PhysicalMemory' {
@@ -79,6 +101,17 @@ function Get-CimInstance {
         default { throw "Unexpected mocked CIM class: $ClassName" }
     }
 }
+
+$SystemOverview = Get-SystemOverview
+Assert-True -Condition ($SystemOverview.ServiceTag -eq '13QJ7D3') -Message 'The system overview should read the BIOS serial number.'
+Assert-True -Condition ($SystemOverview.Model -eq 'Latitude 7420') -Message 'The system overview should read the computer model.'
+
+$script:FailedCimClass = 'Win32_BIOS'
+$SystemWithoutBios = Get-SystemOverview
+Assert-True -Condition ($SystemWithoutBios.ServiceTag -eq '') -Message 'A BIOS failure should produce an empty Service Tag for manual fallback.'
+Assert-True -Condition ($SystemWithoutBios.Model -eq 'Latitude 7420') -Message 'A BIOS failure should not discard computer-system data.'
+Assert-True -Condition ($SystemWithoutBios.Processor -eq 'Test CPU') -Message 'A BIOS failure should not discard processor data.'
+$script:FailedCimClass = $null
 
 $DetectedMockParts = @(Get-HardwareParts -ComputerModel 'Latitude 7420')
 Assert-True -Condition ($DetectedMockParts.Count -eq 6) -Message 'The mocked hardware scan should return all six component categories.'

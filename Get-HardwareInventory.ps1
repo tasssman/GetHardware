@@ -283,19 +283,53 @@ function Resolve-ServiceTag {
 function Get-SystemOverview {
     Write-Section -Title 'Odczyt danych komputera'
 
-    $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-    $Bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop | Select-Object -First 1
-    $Processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+    # Każde źródło CIM jest odczytywane niezależnie. Dzięki temu niedostępny
+    # BIOS nie blokuje danych systemu i procesora, a pusty Service Tag uruchamia
+    # później uzgodniony mechanizm ręcznego wpisania identyfikatora.
+    $ComputerSystem = $null
+    try {
+        $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać danych systemu z Win32_ComputerSystem: $($_.Exception.Message)"
+    }
+
+    $Bios = $null
+    try {
+        $Bios = Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać danych BIOS-u z Win32_BIOS: $($_.Exception.Message)"
+    }
+
+    $Processors = @()
+    try {
+        $Processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać procesora z Win32_Processor: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $ComputerSystem -or [string]::IsNullOrWhiteSpace([string]$ComputerSystem.Model)) {
+        throw 'Nie udało się odczytać modelu komputera z Win32_ComputerSystem. Model jest wymagany do wyszukania urządzenia w bazie.'
+    }
     if ($Processors.Count -eq 0) {
-        throw 'Nie wykryto procesora.'
+        throw 'Nie udało się odczytać procesora z Win32_Processor. Dane procesora są wymagane do utworzenia wpisu.'
     }
 
     $CoreCount = [int](($Processors | Measure-Object -Property NumberOfCores -Sum).Sum)
     $ClockSpeed = [int](($Processors | Measure-Object -Property MaxClockSpeed -Maximum).Maximum)
     $ProcessorNames = @($Processors | ForEach-Object { ([string]$_.Name).Trim() } | Select-Object -Unique)
 
+    $ServiceTag = ''
+    if ($null -ne $Bios) {
+        $ServiceTag = ([string]$Bios.SerialNumber).Trim()
+    }
+
     return [pscustomobject]@{
-        ServiceTag     = [string]$Bios.SerialNumber
+        ServiceTag     = $ServiceTag
         Model          = ([string]$ComputerSystem.Model).Trim()
         Manufacturer   = ([string]$ComputerSystem.Manufacturer).Trim()
         Processor      = ($ProcessorNames -join ' / ')
@@ -492,7 +526,23 @@ function Get-HardwareParts {
 }
 
 function Show-HardwareParts {
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts)
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts,
+        [Parameter(Mandatory)][string]$ServiceTag,
+        [Parameter(Mandatory)][string]$ComputerModel,
+        [Parameter(Mandatory)][string]$Processor,
+        [Parameter(Mandatory)][int]$CoreCount,
+        [Parameter(Mandatory)][int]$MaxClockSpeed
+    )
+
+    Write-Section -Title 'Identyfikacja komputera'
+    Write-Host "SN / Service Tag: $ServiceTag" -ForegroundColor Green
+    Write-Host "Model:            $ComputerModel"
+
+    Write-Section -Title 'Procesor'
+    Write-Host "Model:               $Processor"
+    Write-Host "Rdzenie fizyczne:     $CoreCount"
+    Write-Host "Maks. taktowanie:     $MaxClockSpeed MHz"
 
     Write-Section -Title 'Wykryte podzespoły'
     $Rows = for ($Index = 0; $Index -lt $Parts.Count; $Index++) {
@@ -538,11 +588,24 @@ function Read-HardwarePart {
 }
 
 function Review-HardwareParts {
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$InitialParts)
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$InitialParts,
+        [Parameter(Mandatory)][string]$ServiceTag,
+        [Parameter(Mandatory)][string]$ComputerModel,
+        [Parameter(Mandatory)][string]$Processor,
+        [Parameter(Mandatory)][int]$CoreCount,
+        [Parameter(Mandatory)][int]$MaxClockSpeed
+    )
 
     $Parts = @($InitialParts)
     while ($true) {
-        Show-HardwareParts -Parts $Parts
+        Show-HardwareParts `
+            -Parts $Parts `
+            -ServiceTag $ServiceTag `
+            -ComputerModel $ComputerModel `
+            -Processor $Processor `
+            -CoreCount $CoreCount `
+            -MaxClockSpeed $MaxClockSpeed
         Write-Host '[1] Zaakceptuj listę'
         Write-Host '[2] Edytuj wybrany element'
         Write-Host '[3] Dodaj element'
@@ -911,7 +974,13 @@ function Invoke-HardwareInventory {
 
     while ($true) {
         $DetectedParts = Get-HardwareParts -ComputerModel $System.Model
-        $Review = Review-HardwareParts -InitialParts $DetectedParts
+        $Review = Review-HardwareParts `
+            -InitialParts $DetectedParts `
+            -ServiceTag $ServiceTag `
+            -ComputerModel $System.Model `
+            -Processor $System.Processor `
+            -CoreCount $System.CoreCount `
+            -MaxClockSpeed $System.MaxClockSpeed
         if ($Review.Action -eq 'Accept') {
             $Parts = @($Review.Parts)
             break
@@ -956,11 +1025,23 @@ function Invoke-HardwareInventory {
             continue
         }
         if ($FinalChoice -eq 3) {
-            $Review = Review-HardwareParts -InitialParts $Parts
+            $Review = Review-HardwareParts `
+                -InitialParts $Parts `
+                -ServiceTag $ServiceTag `
+                -ComputerModel $System.Model `
+                -Processor $System.Processor `
+                -CoreCount $System.CoreCount `
+                -MaxClockSpeed $System.MaxClockSpeed
             if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             if ($Review.Action -eq 'Refresh') {
                 $DetectedParts = Get-HardwareParts -ComputerModel $System.Model
-                $Review = Review-HardwareParts -InitialParts $DetectedParts
+                $Review = Review-HardwareParts `
+                    -InitialParts $DetectedParts `
+                    -ServiceTag $ServiceTag `
+                    -ComputerModel $System.Model `
+                    -Processor $System.Processor `
+                    -CoreCount $System.CoreCount `
+                    -MaxClockSpeed $System.MaxClockSpeed
                 if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             }
             throw [OperationCanceledException]::new('Anulowano przegląd podzespołów.')

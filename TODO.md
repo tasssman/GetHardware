@@ -8,10 +8,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### `Get-SystemOverview`
 
-- [ ] Rozdzielić obsługę błędów poszczególnych źródeł CIM.
+- [x] Rozdzielić obsługę błędów poszczególnych źródeł CIM.
   - Błąd `Win32_BIOS` nie powinien przerywać całej funkcji.
   - Nieudany odczyt BIOS-u powinien zwrócić pusty Service Tag i uruchomić uzgodniony mechanizm ręcznego wpisania identyfikatora.
-  - Określić, które dane są krytyczne, a które mogą pozostać puste i zostać uzupełnione ręcznie.
+  - Model i dane procesora są krytyczne; brak któregoś z nich zatrzymuje zapis z precyzyjnym komunikatem.
+  - BIOS/Service Tag jest odzyskiwalny; brak odczytu uruchamia ręczne wpisanie identyfikatora.
 
 - [ ] Odczytywać rzeczywiste dane płyty głównej z `Win32_BaseBoard`.
   - Zebrać `Manufacturer`, `Product`, `Version` i `SerialNumber`.
