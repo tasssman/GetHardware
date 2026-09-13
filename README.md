@@ -21,7 +21,7 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 ## Przebieg
 
-1. Odczyt modelu, Service Tagu, procesora i pozostałych podzespołów.
+1. Odczyt modelu, Service Tagu, procesora, płyty głównej i pozostałych podzespołów.
 2. Sprawdzenie modelu w `hardware-models.json`.
 3. Wybór istniejącego spisu albo utworzenie nowego.
 4. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
@@ -58,7 +58,8 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 ```json
 {
   "model": "Latitude 7420",
-  "mainboard": "Latitude 7420 (DDR3L 1600MHz x2, max8GB)",
+  "baseboardFallback": "Latitude 7420",
+  "memorySpec": "DDR3L 1600MHz x2, max8GB",
   "powerMaxW": 65,
   "powerW": 45,
   "other": "no Eth; zasilacz USB-C",
@@ -66,7 +67,7 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 }
 ```
 
-Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. Skrypt waliduje JSON przy wczytywaniu, ale nigdy nie zmienia go automatycznie.
+Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie. Skrypt waliduje JSON przy wczytywaniu, ale nigdy nie zmienia go automatycznie.
 
 ## Walidacja danych ręcznych
 

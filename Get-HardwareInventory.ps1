@@ -185,7 +185,7 @@ function Import-ModelDatabase {
         throw 'Baza modeli jest pusta.'
     }
 
-    $RequiredProperties = @('model', 'mainboard', 'powerMaxW', 'powerW', 'other', 'deviceType')
+    $RequiredProperties = @('model', 'baseboardFallback', 'memorySpec', 'powerMaxW', 'powerW', 'other', 'deviceType')
     foreach ($Entry in $Models) {
         foreach ($PropertyName in $RequiredProperties) {
             if ($PropertyName -notin $Entry.PSObject.Properties.Name) {
@@ -196,8 +196,8 @@ function Import-ModelDatabase {
         if ([string]::IsNullOrWhiteSpace([string]$Entry.model)) {
             throw 'Baza modeli zawiera wpis z pustą nazwą modelu.'
         }
-        if ([string]::IsNullOrWhiteSpace([string]$Entry.mainboard)) {
-            throw "Model '$($Entry.model)' ma puste pole mainboard."
+        if ([string]::IsNullOrWhiteSpace([string]$Entry.baseboardFallback)) {
+            throw "Model '$($Entry.model)' ma puste pole baseboardFallback."
         }
 
         $PowerMax = 0
@@ -304,6 +304,15 @@ function Get-SystemOverview {
         Write-Warning "Nie udało się odczytać danych BIOS-u z Win32_BIOS: $($_.Exception.Message)"
     }
 
+    $BaseBoard = $null
+    try {
+        $BaseBoard = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać płyty głównej z Win32_BaseBoard: $($_.Exception.Message)"
+    }
+
     $Processors = @()
     try {
         $Processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
@@ -335,7 +344,61 @@ function Get-SystemOverview {
         Processor      = ($ProcessorNames -join ' / ')
         CoreCount      = $CoreCount
         MaxClockSpeed  = $ClockSpeed
+        BaseBoardManufacturer = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Manufacturer).Trim() } else { '' }
+        BaseBoardProduct      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Product).Trim() } else { '' }
+        BaseBoardVersion      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Version).Trim() } else { '' }
     }
+}
+
+function Test-BaseBoardProduct {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return $Value.Trim() -notmatch '^(To be filled by O\.E\.M\.|Default string|Base Board|System Product Name|Unknown|None|N/A)$'
+}
+
+function Join-MainboardDescription {
+    param(
+        [Parameter(Mandatory)][string]$BaseBoardDescription,
+        [AllowEmptyString()][string]$MemorySpec = ''
+    )
+
+    $Description = $BaseBoardDescription.Trim()
+    $NormalizedMemorySpec = $MemorySpec.Trim().Trim('(', ')').Trim()
+    if (-not [string]::IsNullOrWhiteSpace($NormalizedMemorySpec)) {
+        $Description += " ($NormalizedMemorySpec)"
+    }
+    return $Description
+}
+
+function Resolve-MainboardDescription {
+    param(
+        [Parameter(Mandatory)][psobject]$ModelEntry,
+        [AllowNull()][string]$Manufacturer,
+        [AllowNull()][string]$Product,
+        [AllowNull()][string]$Version
+    )
+
+    if (Test-BaseBoardProduct -Value $Product) {
+        $Segments = New-Object System.Collections.Generic.List[string]
+        foreach ($Value in @($Manufacturer, $Product, $Version)) {
+            $Normalized = ([string]$Value).Trim()
+            if ((Test-BaseBoardProduct -Value $Normalized) -and $Normalized -notin $Segments) {
+                $Segments.Add($Normalized)
+            }
+        }
+        $BaseBoardDescription = $Segments -join ' '
+    }
+    else {
+        Write-Warning 'Nie udało się wykryć modelu płyty głównej z Win32_BaseBoard.'
+        $BaseBoardDescription = Read-TextValue `
+            -Prompt 'Opis płyty głównej — Enter zatwierdza wartość z bazy, możesz też wpisać własną' `
+            -Default ([string]$ModelEntry.baseboardFallback)
+    }
+
+    return Join-MainboardDescription `
+        -BaseBoardDescription $BaseBoardDescription `
+        -MemorySpec ([string]$ModelEntry.memorySpec)
 }
 
 function Convert-EdidText {
@@ -532,7 +595,8 @@ function Show-HardwareParts {
         [Parameter(Mandatory)][string]$ComputerModel,
         [Parameter(Mandatory)][string]$Processor,
         [Parameter(Mandatory)][int]$CoreCount,
-        [Parameter(Mandatory)][int]$MaxClockSpeed
+        [Parameter(Mandatory)][int]$MaxClockSpeed,
+        [Parameter(Mandatory)][string]$Mainboard
     )
 
     Write-Section -Title 'Identyfikacja komputera'
@@ -543,6 +607,9 @@ function Show-HardwareParts {
     Write-Host "Model:               $Processor"
     Write-Host "Rdzenie fizyczne:     $CoreCount"
     Write-Host "Maks. taktowanie:     $MaxClockSpeed MHz"
+
+    Write-Section -Title 'Płyta główna'
+    Write-Host $Mainboard
 
     Write-Section -Title 'Wykryte podzespoły'
     $Rows = for ($Index = 0; $Index -lt $Parts.Count; $Index++) {
@@ -594,7 +661,8 @@ function Review-HardwareParts {
         [Parameter(Mandatory)][string]$ComputerModel,
         [Parameter(Mandatory)][string]$Processor,
         [Parameter(Mandatory)][int]$CoreCount,
-        [Parameter(Mandatory)][int]$MaxClockSpeed
+        [Parameter(Mandatory)][int]$MaxClockSpeed,
+        [Parameter(Mandatory)][string]$Mainboard
     )
 
     $Parts = @($InitialParts)
@@ -605,7 +673,8 @@ function Review-HardwareParts {
             -ComputerModel $ComputerModel `
             -Processor $Processor `
             -CoreCount $CoreCount `
-            -MaxClockSpeed $MaxClockSpeed
+            -MaxClockSpeed $MaxClockSpeed `
+            -Mainboard $Mainboard
         Write-Host '[1] Zaakceptuj listę'
         Write-Host '[2] Edytuj wybrany element'
         Write-Host '[3] Dodaj element'
@@ -935,6 +1004,7 @@ function Show-InventorySummary {
     Write-Host "Spis:          $($Collection.Name)"
     Write-Host "Service Tag:   $($Inventory.ServiceTag)"
     Write-Host "Model:         $($Inventory.Model)"
+    Write-Host "Płyta główna:  $($Inventory.Mainboard)"
     Write-Host "Bought:        $($Inventory.Bought)"
     Write-Host "Gwarancja:     $($Inventory.Warranty)"
     Write-Host "Cena netto:    $($Inventory.Price) PLN"
@@ -955,6 +1025,11 @@ function Invoke-HardwareInventory {
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
     Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
     $ModelEntry = Wait-ForKnownModel -Model $System.Model -DatabasePath $ModelDatabasePath
+    $Mainboard = Resolve-MainboardDescription `
+        -ModelEntry $ModelEntry `
+        -Manufacturer $System.BaseBoardManufacturer `
+        -Product $System.BaseBoardProduct `
+        -Version $System.BaseBoardVersion
 
     while ($true) {
         $Collection = Select-Collection -Root $OutputRoot
@@ -980,7 +1055,8 @@ function Invoke-HardwareInventory {
             -ComputerModel $System.Model `
             -Processor $System.Processor `
             -CoreCount $System.CoreCount `
-            -MaxClockSpeed $System.MaxClockSpeed
+            -MaxClockSpeed $System.MaxClockSpeed `
+            -Mainboard $Mainboard
         if ($Review.Action -eq 'Accept') {
             $Parts = @($Review.Parts)
             break
@@ -1003,7 +1079,7 @@ function Invoke-HardwareInventory {
             Processor     = $System.Processor
             CoreCount     = $System.CoreCount
             MaxClockSpeed = $System.MaxClockSpeed
-            Mainboard     = [string]$ModelEntry.mainboard
+            Mainboard     = $Mainboard
             PowerMaxW     = [int]$ModelEntry.powerMaxW
             PowerW        = [int]$ModelEntry.powerW
             Manufacturer  = $System.Manufacturer
@@ -1031,7 +1107,8 @@ function Invoke-HardwareInventory {
                 -ComputerModel $System.Model `
                 -Processor $System.Processor `
                 -CoreCount $System.CoreCount `
-                -MaxClockSpeed $System.MaxClockSpeed
+                -MaxClockSpeed $System.MaxClockSpeed `
+                -Mainboard $Mainboard
             if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             if ($Review.Action -eq 'Refresh') {
                 $DetectedParts = Get-HardwareParts -ComputerModel $System.Model
@@ -1041,7 +1118,8 @@ function Invoke-HardwareInventory {
                     -ComputerModel $System.Model `
                     -Processor $System.Processor `
                     -CoreCount $System.CoreCount `
-                    -MaxClockSpeed $System.MaxClockSpeed
+                    -MaxClockSpeed $System.MaxClockSpeed `
+                    -Mainboard $Mainboard
                 if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             }
             throw [OperationCanceledException]::new('Anulowano przegląd podzespołów.')

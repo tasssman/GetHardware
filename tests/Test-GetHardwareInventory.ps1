@@ -55,6 +55,13 @@ function Get-CimInstance {
         'Win32_BIOS' {
             return [pscustomobject]@{ SerialNumber = '13QJ7D3' }
         }
+        'Win32_BaseBoard' {
+            return [pscustomobject]@{
+                Manufacturer = 'Dell Inc.'
+                Product      = '0FFCXR'
+                Version      = 'A00'
+            }
+        }
         'Win32_Processor' {
             return [pscustomobject]@{
                 Name          = 'Test CPU'
@@ -105,6 +112,7 @@ function Get-CimInstance {
 $SystemOverview = Get-SystemOverview
 Assert-True -Condition ($SystemOverview.ServiceTag -eq '13QJ7D3') -Message 'The system overview should read the BIOS serial number.'
 Assert-True -Condition ($SystemOverview.Model -eq 'Latitude 7420') -Message 'The system overview should read the computer model.'
+Assert-True -Condition ($SystemOverview.BaseBoardProduct -eq '0FFCXR') -Message 'The system overview should read the baseboard product.'
 
 $script:FailedCimClass = 'Win32_BIOS'
 $SystemWithoutBios = Get-SystemOverview
@@ -112,6 +120,35 @@ Assert-True -Condition ($SystemWithoutBios.ServiceTag -eq '') -Message 'A BIOS f
 Assert-True -Condition ($SystemWithoutBios.Model -eq 'Latitude 7420') -Message 'A BIOS failure should not discard computer-system data.'
 Assert-True -Condition ($SystemWithoutBios.Processor -eq 'Test CPU') -Message 'A BIOS failure should not discard processor data.'
 $script:FailedCimClass = $null
+
+$TestModelEntry = $Models | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
+$DetectedMainboard = Resolve-MainboardDescription `
+    -ModelEntry $TestModelEntry `
+    -Manufacturer $SystemOverview.BaseBoardManufacturer `
+    -Product $SystemOverview.BaseBoardProduct `
+    -Version $SystemOverview.BaseBoardVersion
+Assert-True -Condition ($DetectedMainboard -eq "Dell Inc. 0FFCXR A00 ($($TestModelEntry.memorySpec))") -Message 'Detected baseboard data should be combined with memorySpec.'
+
+$script:MockReadHostValue = ''
+function Read-Host {
+    param([string]$Prompt)
+    return $script:MockReadHostValue
+}
+
+$FallbackMainboard = Resolve-MainboardDescription `
+    -ModelEntry $TestModelEntry `
+    -Manufacturer '' `
+    -Product '' `
+    -Version ''
+Assert-True -Condition ($FallbackMainboard -eq "Latitude 7420 ($($TestModelEntry.memorySpec))") -Message 'Missing baseboard data should offer and accept baseboardFallback from JSON.'
+
+$script:MockReadHostValue = 'Custom baseboard A01'
+$CustomMainboard = Resolve-MainboardDescription `
+    -ModelEntry $TestModelEntry `
+    -Manufacturer '' `
+    -Product 'Unknown' `
+    -Version ''
+Assert-True -Condition ($CustomMainboard -eq "Custom baseboard A01 ($($TestModelEntry.memorySpec))") -Message 'The user should be able to replace the baseboard fallback.'
 
 $DetectedMockParts = @(Get-HardwareParts -ComputerModel 'Latitude 7420')
 Assert-True -Condition ($DetectedMockParts.Count -eq 6) -Message 'The mocked hardware scan should return all six component categories.'

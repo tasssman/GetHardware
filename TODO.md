@@ -14,11 +14,13 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Model i dane procesora są krytyczne; brak któregoś z nich zatrzymuje zapis z precyzyjnym komunikatem.
   - BIOS/Service Tag jest odzyskiwalny; brak odczytu uruchamia ręczne wpisanie identyfikatora.
 
-- [ ] Odczytywać rzeczywiste dane płyty głównej z `Win32_BaseBoard`.
+- [x] Odczytywać rzeczywiste dane płyty głównej z `Win32_BaseBoard`.
   - Zebrać `Manufacturer`, `Product`, `Version` i `SerialNumber`.
   - Wyświetlić kod płyty użytkownikowi podczas weryfikacji.
-  - Porównać odczytany produkt płyty z opisem `mainboard` w ręcznej bazie modeli.
-  - Ustalić, czy i które dane płyty mają trafiać do PHP.
+  - Porównać odczytany produkt płyty z awaryjnym opisem `baseboardFallback` w ręcznej bazie modeli.
+  - Do PHP trafiają producent, produkt i wersja płyty połączone z ręcznym `memorySpec`.
+  - Przy braku produktu skrypt proponuje `baseboardFallback` z JSON-u i pozwala go zatwierdzić lub zmienić.
+  - Numer seryjny, status i pozostałe pola techniczne nie są wyświetlane ani zapisywane.
 
 - [ ] Rozszerzyć informacje o procesorze.
   - Zebrać fizyczne rdzenie i logiczne procesory/wątki.
@@ -83,6 +85,12 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Pozwalać przejść do ręcznej edycji niepełnego wpisu matrycy.
 
 ### Pamięć RAM
+
+- [ ] Po opracowaniu odczytu RAM uzupełnić sposób budowania pola `mainb`.
+  - Połączyć rzeczywiste dane płyty z `Win32_BaseBoard` z opisem obsługiwanej konfiguracji pamięci RAM.
+  - Zachować format zbliżony do `Latitude 7420 (DDR3L 1600MHz x2, max8GB)`.
+  - Ustalić, które informacje o typie pamięci, liczbie slotów i maksymalnej pojemności można odczytać automatycznie, a które nadal muszą pochodzić z ręcznej bazy modeli.
+  - Nie mylić aktualnie zainstalowanej pamięci z maksymalną pamięcią obsługiwaną przez płytę główną.
 
 - [ ] Poprawić rozpoznawanie pamięci lutowanej i wymiennej.
   - Obecne wyszukiwanie słów `onboard`, `on board` i `solder` w `DeviceLocator` oraz `BankLabel` jest tylko heurystyką.
@@ -380,9 +388,13 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [ ] Zweryfikować ręczną tabelę modeli.
   - Sprawdzić parametry płyty głównej, pamięci, zasilacza i poboru mocy.
   - Szczególnie przejrzeć wpisy wyglądające na skopiowane pomiędzy różnymi modelami.
+  - [ ] Obsłużyć sytuację, gdy wykrytego modelu laptopa nie ma w pliku `hardware-models.json`.
   - [x] Przenieść tabelę do osobnego pliku JSON, aby łatwiej ją utrzymywać.
 
 ## Priorytet niższy / porządki
+
+- [ ] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
+  1. Laptop nie może mieć podłączonych dodatkowych monitorów — stacjonarnych ani zdalnych.
 
 - [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.
