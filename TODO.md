@@ -61,15 +61,6 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Wykorzystać typ wyjścia, np. `Internal`, `eDP` albo `LVDS`.
   - Gdy sterownik nie udostępnia typu połączenia, nie zgadywać na podstawie numeru seryjnego; ostrzec użytkownika i pozostawić wpis do ręcznej korekty w istniejącym edytorze listy.
 
-- [ ] Odczytywać rzeczywisty typ połączenia ekranu.
-  - Nie przypisywać każdemu monitorowi wartości `VGA,DVI,DP`.
-  - Rozpoznawać co najmniej `HDMI`, `DisplayPort`, `USB-C`, `eDP`, `LVDS` i połączenie wewnętrzne.
-  - Ustalić, czy do PHP dla matrycy nadal zapisywać uproszczone `on board`, a dokładny typ pokazywać tylko diagnostycznie.
-
-- [ ] Rozszerzyć dane EDID używane do weryfikacji.
-  - Odczytywać nazwę, numer seryjny, producenta, kod produktu, tydzień i rok produkcji.
-  - Nadal zapisywać do PHP tylko pola wymagane przez istniejący format importu.
-
 - [x] Poprawić obliczanie i prezentację przekątnej.
   - Obliczać przekątną z fizycznej szerokości i wysokości EDID, jeśli są dostępne.
   - Dopasowywać wynik do typowych przekątnych `10.1`, `11.6`, `12.5`, `13.3`, `14`, `15.6`, `16`, `17.3` i `18` cali z tolerancją `0.35` cala.
@@ -140,17 +131,16 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Format odczytywać przez `IOCTL_STORAGE_QUERY_PROPERTY`; gdy sterownik zwraca `Unknown`, poprosić użytkownika o zatwierdzenie podpowiedzi wynikającej z `BusType`.
   - Dla NVMe z nieznanym formatem proponować `M.2`, ale nie zapisywać go bez zatwierdzenia.
 
-- [ ] Obsłużyć dyski zewnętrzne i nośniki wymienne.
-  - Ustalić, czy dyski USB mają być automatycznie pomijane.
-  - Nawet po pominięciu pokazywać użytkownikowi informację o wykrytym nośniku zewnętrznym.
-  - Nie zapisywać przypadkowo pendrive'a lub dysku serwisowego jako części laptopa.
-  - Rozważyć filtrowanie wirtualnych dysków i urządzeń Storage Spaces.
-
 - [ ] Rozszerzyć dane dysku dostępne podczas weryfikacji.
   - Odczytywać `Manufacturer`, `Model`, `SerialNumber`, `FirmwareVersion`, `BusType`, `MediaType` i `PhysicalLocation`.
   - Pokazywać `HealthStatus` oraz `OperationalStatus` diagnostycznie.
   - Jeśli sterownik pozwala, odczytywać temperaturę, zużycie, czas pracy oraz liczniki błędów przez `Get-StorageReliabilityCounter`.
   - Brak liczników niezawodności traktować jako brak danych, a nie błąd całej inwentaryzacji.
+  - [x] Przed główną tabelą podzespołów pokazywać dla każdego dysku osobną sekcję z nazwą, `HealthStatus`, czasem pracy, łączną ilością odczytanych i zapisanych danych oraz poziomem zużycia.
+  - [x] Dla NVMe odczytywać standardowy dziennik SMART/Health bezpośrednio przez `IOCTL_STORAGE_QUERY_PROPERTY`, ponieważ `Get-StorageReliabilityCounter` nie zawsze udostępnia liczniki danych i czasu pracy.
+  - [x] Przeliczać `DataUnitRead` i `DataUnitWritten` zgodnie ze specyfikacją NVMe: jedna jednostka licznika odpowiada 1000 bloków po 512 bajtów.
+  - [x] Używać `Get-StorageReliabilityCounter` jako źródła awaryjnego dla czasu pracy i zużycia; niedostępne wartości wyświetlać jako `brak danych`, nigdy jako sztuczne zero.
+  - [x] Danych diagnostycznych SMART nie zapisywać w PHP.
 
 - [x] Przetwarzać każdy dysk niezależnie.
   - Błąd odczytu jednego nośnika nie powinien usuwać pozostałych dysków z wyniku.
@@ -401,6 +391,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 - [ ] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
   1. Laptop nie może mieć podłączonych dodatkowych monitorów — stacjonarnych ani zdalnych.
+  2. Obsłużyć dyski zewnętrzne i nośniki wymienne - napisać na początku skryptu że należy odłączyć.
 
 - [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.

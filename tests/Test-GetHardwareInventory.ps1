@@ -41,6 +41,18 @@ $ClockFromWmiFallback = Get-ProcessorClockSpeedMhz -Processors @(
 )
 Assert-True -Condition ($ClockFromWmiFallback -eq 2100) -Message 'MaxClockSpeed should be used when the processor name has no frequency.'
 
+Initialize-StorageTopologyApi
+$MockHealthLog = New-Object byte[] 512
+$MockHealthLog[5] = 3
+[BitConverter]::GetBytes([uint64]2000000).CopyTo($MockHealthLog, 32)
+[BitConverter]::GetBytes([uint64]1000000).CopyTo($MockHealthLog, 48)
+[BitConverter]::GetBytes([uint64]2400).CopyTo($MockHealthLog, 128)
+$ParsedHealthLog = [GetHardware.StorageTopology]::ParseHealthLog($MockHealthLog)
+Assert-True -Condition ($ParsedHealthLog.PercentageUsed -eq 3) -Message 'The NVMe health parser should read PercentageUsed.'
+Assert-True -Condition ($ParsedHealthLog.DataUnitsRead -eq 2000000) -Message 'The NVMe health parser should read DataUnitsRead.'
+Assert-True -Condition ($ParsedHealthLog.DataUnitsWritten -eq 1000000) -Message 'The NVMe health parser should read DataUnitsWritten.'
+Assert-True -Condition ($ParsedHealthLog.PowerOnHours -eq 2400) -Message 'The NVMe health parser should read PowerOnHours.'
+
 $script:FailedCimClass = $null
 
 function Get-PnpDevice {
@@ -74,6 +86,20 @@ function Get-NativeDiskFormFactor {
     param([int]$DiskNumber)
     $Code = if ($script:MockDiskFormFactorName -eq 'M.2') { 8 } else { 0 }
     return [pscustomobject]@{ Code = $Code; Name = $script:MockDiskFormFactorName; Source = 'Mock'; Detail = '' }
+}
+function Get-NativeNvmeHealth {
+    param([int]$DiskNumber)
+    return [pscustomobject]@{
+        Available        = $true
+        PowerOnHours     = [uint64]2400
+        DataUnitsRead    = [uint64]2000000
+        DataUnitsWritten = [uint64]1000000
+        PercentageUsed   = 3
+    }
+}
+function Get-DiskReliabilityData {
+    param([psobject]$Disk)
+    return $null
 }
 function Get-CimInstance {
     param(
@@ -282,6 +308,14 @@ $DiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
 Assert-True -Condition ($DiskPart.Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The disk description should contain decimal capacity, bus, media type, and a deduplicated model.'
 Assert-True -Condition ($DiskPart.Conn -eq 'M.2') -Message 'A native M.2 form factor should be accepted without an interactive fallback.'
 Assert-True -Condition ($DiskPart.Sn -eq '8CE38E040558F5B4') -Message 'The grouped NVMe serial number should be normalized.'
+Assert-True -Condition ($DiskPart.DiskHealthStatus -eq 'Healthy') -Message 'The disk diagnostic data should preserve HealthStatus.'
+Assert-True -Condition ($DiskPart.DiskPowerOnHours -eq 2400) -Message 'The disk diagnostic data should preserve NVMe power-on hours.'
+Assert-True -Condition ($DiskPart.DiskBytesRead -eq 1024000000000) -Message 'NVMe data units read should be converted to bytes.'
+Assert-True -Condition ($DiskPart.DiskBytesWritten -eq 512000000000) -Message 'NVMe data units written should be converted to bytes.'
+Assert-True -Condition ($DiskPart.DiskWearPercent -eq 3) -Message 'The disk diagnostic data should preserve the NVMe wear percentage.'
+Assert-True -Condition ((Format-DiskPowerOnTime -Hours 2400) -match '^2400 h \(100[,.]0 dni\)$') -Message 'Power-on hours should also be shown as days.'
+Assert-True -Condition ((Format-DiskDataAmount -Bytes 1024000000000) -match '^1[,.]02 TB$') -Message 'Disk byte counters should be shown in decimal TB.'
+Assert-True -Condition ((Format-DiskWearLevel -WearPercent 3) -eq '3%') -Message 'Disk wear should be shown as a percentage.'
 
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `

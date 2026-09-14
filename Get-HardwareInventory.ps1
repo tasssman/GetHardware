@@ -732,6 +732,17 @@ namespace GetHardware
         public string Detail { get; set; }
     }
 
+    public sealed class NvmeHealthResult
+    {
+        public bool Available { get; set; }
+        public string Source { get; set; }
+        public string Detail { get; set; }
+        public ulong? PowerOnHours { get; set; }
+        public ulong? DataUnitsRead { get; set; }
+        public ulong? DataUnitsWritten { get; set; }
+        public int? PercentageUsed { get; set; }
+    }
+
     public static class StorageTopology
     {
         private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
@@ -814,6 +825,105 @@ namespace GetHardware
             finally { CloseHandle(handle); }
         }
 
+        public static NvmeHealthResult QueryNvmeHealth(int diskNumber)
+        {
+            string path = @"\\.\PhysicalDrive" + diskNumber;
+            IntPtr handle = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero,
+                OPEN_EXISTING, 0, IntPtr.Zero);
+            if (handle == InvalidHandleValue)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Nie można otworzyć " + path);
+
+            try
+            {
+                // STORAGE_PROPERTY_QUERY (8 B) + STORAGE_PROTOCOL_SPECIFIC_DATA
+                // (40 B) + standardowy 512-bajtowy dziennik NVMe SMART/Health.
+                const int protocolOffset = 8;
+                const int protocolSize = 40;
+                const int healthLogSize = 512;
+                const int bufferSize = protocolOffset + protocolSize + healthLogSize;
+                int[] propertyIds = new int[] { 50, 49 };
+                string[] propertyNames = new string[] {
+                    "StorageDeviceProtocolSpecificProperty",
+                    "StorageAdapterProtocolSpecificProperty"
+                };
+                int lastError = 0;
+
+                for (int propertyIndex = 0; propertyIndex < propertyIds.Length; propertyIndex++)
+                {
+                    byte[] query = new byte[bufferSize];
+                    Buffer.BlockCopy(BitConverter.GetBytes(propertyIds[propertyIndex]), 0, query, 0, 4);
+                    // QueryType = PropertyStandardQuery (0).
+                    Buffer.BlockCopy(BitConverter.GetBytes(3), 0, query, protocolOffset, 4);       // ProtocolTypeNvme
+                    Buffer.BlockCopy(BitConverter.GetBytes(2), 0, query, protocolOffset + 4, 4);   // NVMeDataTypeLogPage
+                    Buffer.BlockCopy(BitConverter.GetBytes(2), 0, query, protocolOffset + 8, 4);   // Health Information log
+                    Buffer.BlockCopy(BitConverter.GetBytes(protocolSize), 0, query, protocolOffset + 16, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(healthLogSize), 0, query, protocolOffset + 20, 4);
+
+                    byte[] output = new byte[bufferSize];
+                    uint bytesReturned;
+                    bool success = DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY, query,
+                        (uint)query.Length, output, (uint)output.Length, out bytesReturned, IntPtr.Zero);
+                    if (!success)
+                    {
+                        lastError = Marshal.GetLastWin32Error();
+                        continue;
+                    }
+                    if (bytesReturned < protocolOffset + protocolSize) continue;
+
+                    uint dataOffset = BitConverter.ToUInt32(output, protocolOffset + 16);
+                    uint dataLength = BitConverter.ToUInt32(output, protocolOffset + 20);
+                    long healthOffset64 = protocolOffset + dataOffset;
+                    if (dataOffset < protocolSize || dataLength < healthLogSize ||
+                        healthOffset64 < 0 || healthOffset64 + healthLogSize > bytesReturned)
+                        continue;
+
+                    NvmeHealthResult result = ParseHealthLog(output, (int)healthOffset64);
+                    result.Available = true;
+                    result.Source = propertyNames[propertyIndex];
+                    return result;
+                }
+
+                return new NvmeHealthResult {
+                    Available = false,
+                    Source = "IOCTL_STORAGE_QUERY_PROPERTY",
+                    Detail = lastError == 0 ? "Sterownik nie zwrócił dziennika NVMe SMART/Health."
+                        : new Win32Exception(lastError).Message
+                };
+            }
+            finally { CloseHandle(handle); }
+        }
+
+        public static NvmeHealthResult ParseHealthLog(byte[] healthLog)
+        {
+            if (healthLog == null) throw new ArgumentNullException("healthLog");
+            return ParseHealthLog(healthLog, 0);
+        }
+
+        private static NvmeHealthResult ParseHealthLog(byte[] buffer, int offset)
+        {
+            if (buffer == null || offset < 0 || offset + 512 > buffer.Length)
+                throw new ArgumentException("Dziennik NVMe SMART/Health musi mieć co najmniej 512 bajtów.");
+
+            return new NvmeHealthResult {
+                Available = true,
+                Source = "NVMe SMART/Health",
+                Detail = "",
+                PercentageUsed = (int)buffer[offset + 5],
+                DataUnitsRead = ReadUInt128AsUInt64(buffer, offset + 32),
+                DataUnitsWritten = ReadUInt128AsUInt64(buffer, offset + 48),
+                PowerOnHours = ReadUInt128AsUInt64(buffer, offset + 128)
+            };
+        }
+
+        private static ulong? ReadUInt128AsUInt64(byte[] buffer, int offset)
+        {
+            // Rzeczywiste liczniki dysków użytkowych mieszczą się w UInt64. Jeśli
+            // starsze 64 bity są niezerowe, nie obcinamy wartości i zgłaszamy brak.
+            for (int index = 8; index < 16; index++)
+                if (buffer[offset + index] != 0) return null;
+            return BitConverter.ToUInt64(buffer, offset);
+        }
+
         private static string GetFormFactorName(int code)
         {
             switch (code)
@@ -841,6 +951,78 @@ function Get-NativeDiskFormFactor {
 
     Initialize-StorageTopologyApi
     return [GetHardware.StorageTopology]::Query($DiskNumber)
+}
+
+function Get-NativeNvmeHealth {
+    param([Parameter(Mandatory)][int]$DiskNumber)
+
+    Initialize-StorageTopologyApi
+    return [GetHardware.StorageTopology]::QueryNvmeHealth($DiskNumber)
+}
+
+function Get-DiskReliabilityData {
+    param([Parameter(Mandatory)][psobject]$Disk)
+
+    if (-not (Get-Command -Name Get-StorageReliabilityCounter -ErrorAction SilentlyContinue)) {
+        return $null
+    }
+    return $Disk | Get-StorageReliabilityCounter -ErrorAction Stop
+}
+
+function Get-DiskHealthInformation {
+    param(
+        [Parameter(Mandatory)][psobject]$Disk,
+        [Parameter(Mandatory)][int]$DiskNumber,
+        [AllowNull()][string]$BusType
+    )
+
+    $Health = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'HealthStatus')
+    $PowerOnHours = $null
+    $BytesRead = $null
+    $BytesWritten = $null
+    $WearPercent = $null
+    $Source = New-Object System.Collections.Generic.List[string]
+
+    if (([string]$BusType).Trim() -ieq 'NVMe') {
+        try {
+            $Native = Get-NativeNvmeHealth -DiskNumber $DiskNumber
+            if ($null -ne $Native -and $Native.Available) {
+                $PowerOnHours = Get-OptionalPropertyValue -InputObject $Native -Name 'PowerOnHours'
+                $DataUnitsRead = Get-OptionalPropertyValue -InputObject $Native -Name 'DataUnitsRead'
+                $DataUnitsWritten = Get-OptionalPropertyValue -InputObject $Native -Name 'DataUnitsWritten'
+                $WearPercent = Get-OptionalPropertyValue -InputObject $Native -Name 'PercentageUsed'
+                if ($null -ne $DataUnitsRead) { $BytesRead = [decimal]$DataUnitsRead * 512000 }
+                if ($null -ne $DataUnitsWritten) { $BytesWritten = [decimal]$DataUnitsWritten * 512000 }
+                $Source.Add('NVMe SMART/Health')
+            }
+        }
+        catch { }
+    }
+
+    if ($null -eq $PowerOnHours -or $null -eq $WearPercent) {
+        try {
+            $Reliability = Get-DiskReliabilityData -Disk $Disk
+            if ($null -ne $Reliability) {
+                if ($null -eq $PowerOnHours) {
+                    $PowerOnHours = Get-OptionalPropertyValue -InputObject $Reliability -Name 'PowerOnHours'
+                }
+                if ($null -eq $WearPercent) {
+                    $WearPercent = Get-OptionalPropertyValue -InputObject $Reliability -Name 'Wear'
+                }
+                $Source.Add('Get-StorageReliabilityCounter')
+            }
+        }
+        catch { }
+    }
+
+    return [pscustomobject]@{
+        HealthStatus = $Health
+        PowerOnHours = $PowerOnHours
+        BytesRead     = $BytesRead
+        BytesWritten  = $BytesWritten
+        WearPercent   = $WearPercent
+        Source        = ($Source | Select-Object -Unique) -join ', '
+    }
 }
 
 function Test-DiskSerialNumber {
@@ -964,7 +1146,15 @@ function New-PhysicalDiskPart {
         Write-Warning "Dysk '$Description' zgłasza HealthStatus: $Health."
     }
 
-    return New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $HealthInformation = Get-DiskHealthInformation -Disk $Disk -DiskNumber $DiskNumber -BusType $BusType
+    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $Part | Add-Member -NotePropertyName DiskHealthStatus -NotePropertyValue $HealthInformation.HealthStatus
+    $Part | Add-Member -NotePropertyName DiskPowerOnHours -NotePropertyValue $HealthInformation.PowerOnHours
+    $Part | Add-Member -NotePropertyName DiskBytesRead -NotePropertyValue $HealthInformation.BytesRead
+    $Part | Add-Member -NotePropertyName DiskBytesWritten -NotePropertyValue $HealthInformation.BytesWritten
+    $Part | Add-Member -NotePropertyName DiskWearPercent -NotePropertyValue $HealthInformation.WearPercent
+    $Part | Add-Member -NotePropertyName DiskDiagnosticSource -NotePropertyValue $HealthInformation.Source
+    return $Part
 }
 
 function New-Win32DiskPart {
@@ -985,7 +1175,14 @@ function New-Win32DiskPart {
     $Serial = Get-NormalizedDiskSerialNumber `
         -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
         -UniqueId ''
-    return New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $Part | Add-Member -NotePropertyName DiskHealthStatus -NotePropertyValue ''
+    $Part | Add-Member -NotePropertyName DiskPowerOnHours -NotePropertyValue $null
+    $Part | Add-Member -NotePropertyName DiskBytesRead -NotePropertyValue $null
+    $Part | Add-Member -NotePropertyName DiskBytesWritten -NotePropertyValue $null
+    $Part | Add-Member -NotePropertyName DiskWearPercent -NotePropertyValue $null
+    $Part | Add-Member -NotePropertyName DiskDiagnosticSource -NotePropertyValue ''
+    return $Part
 }
 
 function Get-DiskInventoryParts {
@@ -1458,6 +1655,68 @@ function Get-HardwareParts {
     return $Parts.ToArray()
 }
 
+function Format-DiskPowerOnTime {
+    param([AllowNull()]$Hours)
+
+    if ($null -eq $Hours -or [string]::IsNullOrWhiteSpace([string]$Hours)) { return 'brak danych' }
+    try { $NumericHours = [decimal]$Hours }
+    catch { return 'brak danych' }
+    if ($NumericHours -lt 0) { return 'brak danych' }
+
+    $Culture = [Globalization.CultureInfo]::CurrentCulture
+    $HoursText = $NumericHours.ToString('0', $Culture)
+    $DaysText = ($NumericHours / 24).ToString('0.0', $Culture)
+    return "$HoursText h ($DaysText dni)"
+}
+
+function Format-DiskDataAmount {
+    param([AllowNull()]$Bytes)
+
+    if ($null -eq $Bytes -or [string]::IsNullOrWhiteSpace([string]$Bytes)) { return 'brak danych' }
+    try { $NumericBytes = [decimal]$Bytes }
+    catch { return 'brak danych' }
+    if ($NumericBytes -lt 0) { return 'brak danych' }
+
+    $Culture = [Globalization.CultureInfo]::CurrentCulture
+    if ($NumericBytes -ge 1000000000000) {
+        return "$(($NumericBytes / 1000000000000).ToString('0.00', $Culture)) TB"
+    }
+    if ($NumericBytes -ge 1000000000) {
+        return "$(($NumericBytes / 1000000000).ToString('0.00', $Culture)) GB"
+    }
+    if ($NumericBytes -ge 1000000) {
+        return "$(($NumericBytes / 1000000).ToString('0.00', $Culture)) MB"
+    }
+    return "$($NumericBytes.ToString('0', $Culture)) B"
+}
+
+function Format-DiskWearLevel {
+    param([AllowNull()]$WearPercent)
+
+    if ($null -eq $WearPercent -or [string]::IsNullOrWhiteSpace([string]$WearPercent)) { return 'brak danych' }
+    try { $NumericWear = [decimal]$WearPercent }
+    catch { return 'brak danych' }
+    if ($NumericWear -lt 0) { return 'brak danych' }
+    return "$($NumericWear.ToString('0.##', [Globalization.CultureInfo]::CurrentCulture))%"
+}
+
+function Show-DiskHealthInformation {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts)
+
+    foreach ($Disk in @($Parts | Where-Object Pt -EQ 'Hard Disk')) {
+        $Health = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'DiskHealthStatus')
+        if ([string]::IsNullOrWhiteSpace($Health)) { $Health = 'brak danych' }
+
+        Write-Section -Title 'Stan dysku'
+        Write-Host "Dysk:         $($Disk.Desc)"
+        Write-Host "HealthStatus: $Health"
+        Write-Host "Czas pracy:   $(Format-DiskPowerOnTime -Hours (Get-OptionalPropertyValue -InputObject $Disk -Name 'DiskPowerOnHours'))"
+        Write-Host "Odczytano:    $(Format-DiskDataAmount -Bytes (Get-OptionalPropertyValue -InputObject $Disk -Name 'DiskBytesRead'))"
+        Write-Host "Zapisano:     $(Format-DiskDataAmount -Bytes (Get-OptionalPropertyValue -InputObject $Disk -Name 'DiskBytesWritten'))"
+        Write-Host "Wear level:   $(Format-DiskWearLevel -WearPercent (Get-OptionalPropertyValue -InputObject $Disk -Name 'DiskWearPercent'))"
+    }
+}
+
 function Show-HardwareParts {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts,
@@ -1480,6 +1739,8 @@ function Show-HardwareParts {
 
     Write-Section -Title 'Płyta główna'
     Write-Host $Mainboard
+
+    Show-DiskHealthInformation -Parts $Parts
 
     Write-Section -Title 'Wykryte podzespoły'
     $Rows = for ($Index = 0; $Index -lt $Parts.Count; $Index++) {
