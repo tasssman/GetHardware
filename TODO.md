@@ -192,12 +192,6 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Zachować wbudowane Wi-Fi i Bluetooth PAN; pomijać fizyczne adaptery USB.
   - Pokazywać użytkownikowi przyczynę pominięcia każdego adaptera.
 
-- [ ] Rozszerzyć dane dostępne podczas weryfikacji.
-  - Pokazywać nazwę, opis interfejsu, typ fizyczny, magistralę, stan połączenia i szybkość łącza.
-  - Pokazywać wersję, datę i nazwę pliku sterownika, jeśli są dostępne.
-  - Dane dynamiczne, takie jak stan i szybkość bieżącego połączenia, wykorzystywać tylko diagnostycznie.
-  - Zdecydować, czy informacje o sterowniku mają pozostać wyłącznie w konsoli.
-
 - [x] Przetwarzać każdy adapter niezależnie.
   - Błąd jednego adaptera nie powinien usuwać wszystkich kart sieciowych z wyniku.
   - W ostrzeżeniu wskazywać nazwę lub identyfikator problematycznego urządzenia.
@@ -209,21 +203,24 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Karta dźwiękowa
 
-- [ ] Klasyfikować wykryte urządzenia audio.
+- [x] Klasyfikować wykryte urządzenia audio.
   - Rozróżniać wewnętrzny kodek, audio HDMI/DisplayPort, urządzenia USB, Bluetooth i audio stacji dokującej.
   - Wykorzystać `Caption`, `ProductName`, `Manufacturer` i `PNPDeviceID`.
   - Nie traktować każdego wpisu `Win32_SoundDevice` jako osobnej wewnętrznej karty dźwiękowej.
 
-- [ ] Ustalić zakres urządzeń audio zapisywanych do PHP.
-  - Zdecydować, czy audio HDMI/DisplayPort ma być pomijane.
-  - Zdecydować, czy urządzenia USB i Bluetooth mają być pomijane.
-  - Zdecydować, czy automatycznie dodawać wyłącznie główny wewnętrzny kodek.
+- [x] Ustalić zakres urządzeń audio zapisywanych do PHP.
+  - Pomijać audio HDMI/DisplayPort.
+  - [x] Zewnętrzne karty dźwiękowe USB mają być odłączone przed inwentaryzacją i pomijane, jeśli mimo to zostaną wykryte.
+  - Pomijać urządzenia audio Bluetooth.
+  - Automatycznie dodawać wyłącznie główny wewnętrzny kodek.
   - Pokazywać użytkownikowi listę urządzeń pominiętych wraz z przyczyną.
 
-- [ ] Poprawić ustalanie rodzaju połączenia.
+- [x] Poprawić ustalanie rodzaju połączenia.
   - Zapisywać `on board` wyłącznie dla rozpoznanego wewnętrznego kodeka.
-  - Rozpoznawać co najmniej `HDMI/DisplayPort`, `USB` i `Bluetooth`.
+  - Rozpoznawać i pomijać `HDMI/DisplayPort`, zewnętrzne `USB` oraz `Bluetooth`.
   - Nie przypisywać wartości `on board` wszystkim urządzeniom audio.
+  - Pomijać kontrolery Intel Smart Sound Technology, ponieważ nie są osobnymi kartami dźwiękowymi.
+  - Gdy jedynym kandydatem jest `Realtek USB Audio`, pytać użytkownika, czy jest to wewnętrzny kodek laptopa.
 
 - [ ] Rozszerzyć dane urządzenia audio dostępne podczas weryfikacji.
   - Odczytywać `Caption`, `Description`, `Manufacturer`, `ProductName`, `PNPDeviceID`, `Status` i `ConfigManagerErrorCode`.
@@ -232,12 +229,12 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Dane sterownika wykorzystywać diagnostycznie, bez dodawania ich do PHP.
 
 - [ ] Walidować stan urządzeń audio.
-  - Ostrzegać, gdy `ConfigManagerErrorCode` jest inny niż `0` albo `Status` nie wskazuje poprawnego działania.
+  - [x] Ostrzegać, gdy `ConfigManagerErrorCode` jest inny niż `0` albo `Status` nie wskazuje poprawnego działania.
   - Ostrzegać przy ogólnym sterowniku lub nazwie `High Definition Audio Device`.
-  - Ostrzegać, jeśli w laptopie nie znaleziono żadnego wewnętrznego kodeka.
+  - [x] Ostrzegać, jeśli w laptopie nie znaleziono żadnego wewnętrznego kodeka.
   - Zdecydować, czy brak sprawnego wewnętrznego audio ma blokować zapis, czy tylko wymagać potwierdzenia.
 
-- [ ] Przetwarzać każde urządzenie audio niezależnie.
+- [x] Przetwarzać każde urządzenie audio niezależnie.
   - Błąd pojedynczego wpisu nie powinien usuwać wszystkich urządzeń audio z wyniku.
   - W ostrzeżeniu wskazywać nazwę albo identyfikator problematycznego urządzenia.
 
@@ -245,7 +242,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Używać go wyłącznie diagnostycznie do pokazania głośników, mikrofonów, słuchawek i wyjść HDMI.
   - Nie tworzyć automatycznie osobnego wpisu PHP dla każdego endpointu należącego do tego samego kodeka.
 
-- [ ] Zachować prosty format głównego kodeka w PHP.
+- [x] Zachować prosty format głównego kodeka w PHP.
   - Pozostawić typ `Sound Card`.
   - Dla rozpoznanego kodeka wewnętrznego zapisywać krótki opis, np. `Realtek Audio`, oraz `conn'=>'on board'`.
 
@@ -391,7 +388,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 - [ ] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
   1. Laptop nie może mieć podłączonych dodatkowych monitorów — stacjonarnych ani zdalnych.
-  2. Przed rozpoczęciem inwentaryzacji należy odłączyć urządzenia USB, w szczególności zewnętrzne karty sieciowe, dyski, pendrive'y i stacje dokujące.
+  2. Przed rozpoczęciem inwentaryzacji należy odłączyć urządzenia USB, w szczególności zewnętrzne karty sieciowe, karty dźwiękowe, dyski, pendrive'y i stacje dokujące.
 
 - [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.

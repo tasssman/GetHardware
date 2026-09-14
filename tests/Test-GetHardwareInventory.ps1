@@ -224,7 +224,11 @@ function Get-CimInstance {
             }
         }
         'Win32_SoundDevice' {
-            return [pscustomobject]@{ Caption = 'Test audio' }
+            return @(
+                [pscustomobject]@{ Name = 'Realtek USB Audio'; Caption = 'Realtek USB Audio'; Description = 'Realtek USB Audio'; Manufacturer = 'Realtek'; ProductName = 'Realtek USB Audio'; PNPDeviceID = 'USB\VID_0BDA&PID_402E&MI_00'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+                [pscustomobject]@{ Name = 'Intel Smart Sound Technology for USB Audio'; Caption = 'Intel Smart Sound Technology for USB Audio'; Description = 'Intel Smart Sound Technology for USB Audio'; Manufacturer = 'Intel(R) Corporation'; ProductName = 'Intel Smart Sound Technology for USB Audio'; PNPDeviceID = 'INTELAUDIO\CTLR_DEV_43C8&LINKTYPE_06'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+                [pscustomobject]@{ Name = 'Realtek Audio'; Caption = 'Realtek Audio'; Description = 'Realtek Audio'; Manufacturer = 'Realtek'; ProductName = 'Realtek Audio'; PNPDeviceID = 'INTELAUDIO\FUNC_01&VEN_10EC&DEV_0236'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+            )
         }
         'Win32_VideoController' {
             return @(
@@ -338,6 +342,11 @@ Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Bluetooth Device
 Assert-True -Condition ((Get-NormalizedMacAddress -Value 'FF-FF-FF-FF-FF-FF') -eq '') -Message 'A broadcast MAC address should be rejected.'
 Assert-True -Condition (Test-LocallyAdministeredMacAddress -Value '02-11-22-33-44-55') -Message 'A locally administered MAC address should be recognized.'
 
+$SoundParts = @(Get-SoundInventoryParts)
+Assert-True -Condition ($SoundParts.Count -eq 1) -Message 'Only one main internal audio codec should be written.'
+Assert-True -Condition ($SoundParts[0].Desc -eq 'Realtek Audio') -Message 'The INTELAUDIO FUNC Realtek codec should be preferred.'
+Assert-True -Condition ($SoundParts[0].Conn -eq 'on board') -Message 'The main internal codec should use the on board connection.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
     -MemorySpec ([string]$TestModelEntry.memorySpec) `
@@ -392,6 +401,8 @@ Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'RAM').Count 
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Count -eq 1) -Message 'The mocked scan should include a disk.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The mocked scan should use Get-PhysicalDisk data.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Network Card').Count -eq 3) -Message 'The mocked scan should include only the approved built-in network adapters.'
+Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Sound Card').Count -eq 1) -Message 'The mocked scan should include only one main sound codec.'
+Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Sound Card').Desc -eq 'Realtek Audio') -Message 'The mocked scan should omit Intel SST and redundant Realtek USB Audio entries.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Count -eq 1) -Message 'Software and remote display adapters should be excluded.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Conn -eq 'on board,HDMI,USB-C') -Message 'The user-entered graphics outputs should be preserved.'
 

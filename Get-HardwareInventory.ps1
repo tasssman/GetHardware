@@ -1507,6 +1507,121 @@ function Get-NetworkInventoryParts {
     return $Parts.ToArray()
 }
 
+function Get-SoundDeviceDescription {
+    param([Parameter(Mandatory)][psobject]$Device)
+
+    $Description = @(
+        [string](Get-OptionalPropertyValue -InputObject $Device -Name 'Caption')
+        [string](Get-OptionalPropertyValue -InputObject $Device -Name 'Name')
+        [string](Get-OptionalPropertyValue -InputObject $Device -Name 'Description')
+        [string](Get-OptionalPropertyValue -InputObject $Device -Name 'ProductName')
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+    return ([string]$Description -replace '\s+', ' ').Trim()
+}
+
+function Get-SoundDeviceClassification {
+    param([Parameter(Mandatory)][psobject]$Device)
+
+    $Description = Get-SoundDeviceDescription -Device $Device
+    $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Device -Name 'PNPDeviceID')).Trim()
+
+    if ($PnpDeviceId -match '^(?i)INTELAUDIO\\CTLR_' -or
+        $Description -match '(?i)Intel.*Smart Sound Technology') {
+        return [pscustomobject]@{ Kind = 'Controller'; Description = $Description; Reason = 'kontroler Intel Smart Sound Technology, a nie osobna karta' }
+    }
+    if ($PnpDeviceId -match '^(?i)BTH\\' -or $Description -match '(?i)Bluetooth') {
+        return [pscustomobject]@{ Kind = 'Skip'; Description = $Description; Reason = 'urządzenie audio Bluetooth' }
+    }
+    if ($Description -match '(?i)Display Audio|HDMI|DisplayPort|NVIDIA.*Audio|AMD.*Audio') {
+        return [pscustomobject]@{ Kind = 'Skip'; Description = $Description; Reason = 'audio HDMI/DisplayPort' }
+    }
+    if ($PnpDeviceId -match '^(?i)USB\\') {
+        if ($Description -match '^(?i)Realtek(?:\(R\))? USB Audio$') {
+            return [pscustomobject]@{ Kind = 'RealtekUsbFallback'; Description = $Description; Reason = 'kodek Realtek korzystający ze ścieżki USB' }
+        }
+        return [pscustomobject]@{ Kind = 'Skip'; Description = $Description; Reason = 'urządzenie audio USB' }
+    }
+    if ($PnpDeviceId -match '^(?i)(?:INTELAUDIO|HDAUDIO)\\FUNC_') {
+        return [pscustomobject]@{ Kind = 'Codec'; Description = $Description; Reason = 'wewnętrzny kodek audio' }
+    }
+    return [pscustomobject]@{ Kind = 'Skip'; Description = $Description; Reason = 'nierozpoznane urządzenie audio' }
+}
+
+function Write-SoundDeviceHealthWarning {
+    param([Parameter(Mandatory)][psobject]$Device)
+
+    $Description = Get-SoundDeviceDescription -Device $Device
+    $Status = [string](Get-OptionalPropertyValue -InputObject $Device -Name 'Status')
+    $ErrorCode = Get-OptionalPropertyValue -InputObject $Device -Name 'ConfigManagerErrorCode'
+    if ((-not [string]::IsNullOrWhiteSpace($Status) -and $Status -ne 'OK') -or
+        ($null -ne $ErrorCode -and [int]$ErrorCode -ne 0)) {
+        $StatusText = if ([string]::IsNullOrWhiteSpace($Status)) { 'brak danych' } else { $Status }
+        $CodeText = if ($null -eq $ErrorCode) { 'brak danych' } else { [string]$ErrorCode }
+        Write-Warning "Urządzenie audio '$Description' zgłasza Status=$StatusText, ConfigManagerErrorCode=$CodeText."
+    }
+}
+
+function Get-SoundInventoryParts {
+    $Parts = New-Object System.Collections.Generic.List[object]
+    $Codecs = New-Object System.Collections.Generic.List[object]
+    $UsbFallbacks = New-Object System.Collections.Generic.List[object]
+    $Devices = @()
+
+    try { $Devices = @(Get-CimInstance -ClassName Win32_SoundDevice -ErrorAction Stop) }
+    catch {
+        Write-Warning "Nie udało się odczytać kart dźwiękowych: $($_.Exception.Message)"
+        return $Parts.ToArray()
+    }
+
+    foreach ($Device in $Devices) {
+        try {
+            Write-SoundDeviceHealthWarning -Device $Device
+            $Classification = Get-SoundDeviceClassification -Device $Device
+            switch ($Classification.Kind) {
+                'Codec' { $Codecs.Add([pscustomobject]@{ Device = $Device; Classification = $Classification }) }
+                'RealtekUsbFallback' { $UsbFallbacks.Add([pscustomobject]@{ Device = $Device; Classification = $Classification }) }
+                default {
+                    $DisplayName = if ([string]::IsNullOrWhiteSpace([string]$Classification.Description)) { '(bez nazwy)' } else { $Classification.Description }
+                    Write-Host "Pominięto urządzenie audio '$DisplayName': $($Classification.Reason)." -ForegroundColor DarkGray
+                }
+            }
+        }
+        catch {
+            $Identity = Get-SoundDeviceDescription -Device $Device
+            Write-Warning "Pominięto urządzenie audio '$Identity': $($_.Exception.Message)"
+        }
+    }
+
+    if ($Codecs.Count -gt 0) {
+        $MainCodec = @($Codecs.ToArray() | Sort-Object @{ Expression = { if ($_.Classification.Description -match '(?i)Realtek') { 0 } else { 1 } } } | Select-Object -First 1)[0]
+        $Parts.Add((New-HardwarePart -Type 'Sound Card' -Description $MainCodec.Classification.Description -Connection 'on board'))
+        foreach ($AdditionalCodec in @($Codecs.ToArray() | Where-Object { $_ -ne $MainCodec })) {
+            Write-Host "Pominięto dodatkowe urządzenie audio '$($AdditionalCodec.Classification.Description)': wybrano główny kodek '$($MainCodec.Classification.Description)'." -ForegroundColor DarkGray
+        }
+        foreach ($UsbDevice in $UsbFallbacks.ToArray()) {
+            Write-Host "Pominięto urządzenie audio '$($UsbDevice.Classification.Description)': wykryto już główny kodek '$($MainCodec.Classification.Description)'." -ForegroundColor DarkGray
+        }
+        return $Parts.ToArray()
+    }
+
+    if ($UsbFallbacks.Count -gt 0) {
+        $Candidate = $UsbFallbacks[0]
+        Write-Section -Title 'Weryfikacja karty dźwiękowej'
+        Write-Host "Wykryto tylko: $($Candidate.Classification.Description)" -ForegroundColor Yellow
+        Write-Host 'Urządzenie używa magistrali USB, ale może być wewnętrznym kodekiem laptopa.'
+        Write-Host '[1] Zapisz jako wewnętrzną kartę dźwiękową'
+        Write-Host '[2] Pomiń urządzenie'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+        if ($Choice -eq 1) {
+            $Parts.Add((New-HardwarePart -Type 'Sound Card' -Description $Candidate.Classification.Description -Connection 'on board'))
+        }
+        return $Parts.ToArray()
+    }
+
+    Write-Warning 'Nie wykryto głównego wewnętrznego kodeka audio.'
+    return $Parts.ToArray()
+}
+
 function Get-GraphicsDescription {
     param([Parameter(Mandatory)][psobject]$Graphics)
 
@@ -1865,15 +1980,12 @@ function Get-HardwareParts {
         $Parts.Add($NetworkPart)
     }
 
-    # DŹWIĘK: WMI może zwrócić więcej niż jedno urządzenie audio; każde jest
-    # pozostawione do zatwierdzenia przez użytkownika.
-    try {
-        foreach ($Sound in @(Get-CimInstance -ClassName Win32_SoundDevice -ErrorAction Stop)) {
-            $Parts.Add((New-HardwarePart -Type 'Sound Card' -Description ([string]$Sound.Caption) -Connection 'on board'))
-        }
-    }
-    catch {
-        Write-Warning "Nie udało się odczytać kart dźwiękowych: $($_.Exception.Message)"
+    # DŹWIĘK: zapisujemy jeden główny wewnętrzny kodek. Kontrolery Intel SST,
+    # audio HDMI/DisplayPort, Bluetooth i zewnętrzne urządzenia USB nie tworzą
+    # osobnych rekordów PHP. Samotny Realtek USB Audio wymaga potwierdzenia,
+    # ponieważ w części laptopów jest to kodek podłączony wewnętrznie przez USB.
+    foreach ($SoundPart in @(Get-SoundInventoryParts)) {
+        $Parts.Add($SoundPart)
     }
 
     # GRAFIKA: Windows nie udostępnia wiarygodnej listy wszystkich fizycznych
