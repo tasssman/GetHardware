@@ -43,7 +43,14 @@ Assert-True -Condition ($ClockFromWmiFallback -eq 2100) -Message 'MaxClockSpeed 
 
 $script:FailedCimClass = $null
 
-function Get-PnpDevice { return @() }
+function Get-PnpDevice {
+    param([switch]$PresentOnly, $ErrorAction)
+    return @()
+}
+function Get-PnpDeviceProperty {
+    param([string]$InstanceId, [string]$KeyName, $ErrorAction)
+    return [pscustomobject]@{ Data = @() }
+}
 function Get-CimInstance {
     param(
         [string]$ClassName,
@@ -79,8 +86,38 @@ function Get-CimInstance {
                 MaxClockSpeed = 3000
             }
         }
-        'WmiMonitorBasicDisplayParams' { return @() }
-        'WmiMonitorID' { return @() }
+        'WmiMonitorBasicDisplayParams' {
+            return [pscustomobject]@{
+                InstanceName          = 'DISPLAY\NCP002B\TEST_0'
+                MaxHorizontalImageSize = 31
+                MaxVerticalImageSize   = 17
+            }
+        }
+        'WmiMonitorConnectionParams' {
+            return [pscustomobject]@{
+                InstanceName         = 'DISPLAY\NCP002B\TEST_0'
+                VideoOutputTechnology = [uint32]2147483648
+            }
+        }
+        'WmiMonitorListedSupportedSourceModes' {
+            return [pscustomobject]@{
+                InstanceName       = 'DISPLAY\NCP002B\TEST_0'
+                MonitorSourceModes = @(
+                    [pscustomobject]@{ HorizontalActivePixels = 1280; VerticalActivePixels = 720 }
+                    [pscustomobject]@{ HorizontalActivePixels = 1920; VerticalActivePixels = 1080 }
+                )
+            }
+        }
+        'WmiMonitorID' {
+            return [pscustomobject]@{
+                InstanceName    = 'DISPLAY\NCP002B\TEST_0'
+                Active          = $true
+                ManufacturerName = [byte[]](78, 67, 80, 0)
+                ProductCodeID    = [byte[]](48, 48, 50, 66, 0)
+                UserFriendlyName = [byte[]](0)
+                SerialNumberID   = [byte[]](48, 0)
+            }
+        }
         'Win32_PhysicalMemory' {
             return [pscustomobject]@{
                 Capacity             = 16GB
@@ -182,6 +219,29 @@ Assert-True -Condition ($SolderedMemory.Parts[0].Conn -eq 'soldered') -Message '
 Assert-True -Condition ($SolderedMemory.Parts[0].Sn -eq '') -Message 'Placeholder RAM serial numbers should be discarded.'
 Assert-True -Condition ($SolderedMemory.DetectedSpec -eq 'LPDDR4 4267MHz soldered, max16GB') -Message 'Soldered memorySpec should not treat memory devices as slots.'
 
+$DisplayParts = @(ConvertTo-DisplayParts `
+    -MonitorIds @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; Active = $true; SerialNumberID = [byte[]](48, 0) }) `
+    -DisplayParameters @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; MaxHorizontalImageSize = 31; MaxVerticalImageSize = 17 }) `
+    -ConnectionParameters @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; VideoOutputTechnology = [uint32]2147483648 }) `
+    -ModeLists @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; MonitorSourceModes = @([pscustomobject]@{ HorizontalActivePixels = 1920; VerticalActivePixels = 1080 }) }) `
+    -TouchDetected $false)
+Assert-True -Condition ($DisplayParts.Count -eq 1) -Message 'The active internal panel should produce one display part.'
+Assert-True -Condition ($DisplayParts[0].Pt -eq 'Matrix') -Message 'An INTERNAL video output should be classified as Matrix.'
+Assert-True -Condition ($DisplayParts[0].Desc -eq '14" 1920x1080') -Message 'A 31x17 cm panel should be normalized to the agreed 14-inch native-resolution description.'
+Assert-True -Condition ($DisplayParts[0].Conn -eq 'on board') -Message 'An internal panel should use the agreed on board connection.'
+Assert-True -Condition ($DisplayParts[0].Sn -eq '') -Message 'A placeholder EDID serial number should not be written to PHP.'
+Assert-True -Condition ((Get-DisplaySizeText -WidthCm 34 -HeightCm 19) -eq '15.6"') -Message 'An imprecise 15.3-inch WMI result should snap to the common 15.6-inch size.'
+Assert-True -Condition ((Get-DisplaySizeText -WidthCm 38 -HeightCm 21) -eq '17.3"') -Message 'An imprecise 17.1-inch WMI result should snap to the common 17.3-inch size.'
+Assert-True -Condition ((Get-DisplaySizeText -WidthCm 32 -HeightCm 18) -eq '14.5"') -Message 'A nonstandard size outside the tolerance should retain one decimal place.'
+
+$TouchDisplayParts = @(ConvertTo-DisplayParts `
+    -MonitorIds @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; Active = $true; SerialNumberID = [byte[]](48, 0) }) `
+    -DisplayParameters @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; MaxHorizontalImageSize = 31; MaxVerticalImageSize = 17 }) `
+    -ConnectionParameters @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; VideoOutputTechnology = 11 }) `
+    -ModeLists @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; MonitorSourceModes = @([pscustomobject]@{ HorizontalActivePixels = 1920; VerticalActivePixels = 1080 }) }) `
+    -TouchDetected $true)
+Assert-True -Condition ($TouchDisplayParts[0].Desc -eq '14" 1920x1080 touch') -Message 'A detected HID touchscreen should add touch only to the internal matrix description.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
     -MemorySpec ([string]$TestModelEntry.memorySpec) `
@@ -218,7 +278,8 @@ $CustomMainboard = Resolve-MainboardDescription `
 Assert-True -Condition ($CustomMainboard -eq "Custom baseboard A01 ($($TestModelEntry.memorySpec))") -Message 'The user should be able to replace the baseboard fallback.'
 
 $DetectedMockParts = @(Get-HardwareParts -ComputerModel 'Latitude 7420')
-Assert-True -Condition ($DetectedMockParts.Count -eq 6) -Message 'The mocked hardware scan should return all six component categories.'
+Assert-True -Condition ($DetectedMockParts.Count -eq 7) -Message 'The mocked hardware scan should return all seven component categories.'
+Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Matrix').Desc -eq '14" 1920x1080') -Message 'The mocked scan should include the EDID-based matrix description.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'RAM').Count -eq 1) -Message 'The mocked scan should include RAM.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Count -eq 1) -Message 'The mocked scan should include a disk.'
 

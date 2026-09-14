@@ -44,20 +44,20 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Nie traktować rozdzielczości wirtualnego pulpitu RDP jako rozdzielczości fizycznej matrycy.
   - Przy sesji zdalnej zgłaszać, że dane ekranu są niewiarygodne i wymagają późniejszego lokalnego odczytu lub ręcznej korekty.
 
-- [ ] Odczytywać natywną rozdzielczość matrycy zamiast rozdzielczości bieżącej sesji.
-  - `System.Windows.Forms.Screen.Bounds` pozostawić co najwyżej jako wartość pomocniczą lub awaryjną.
-  - Sprawdzić odczyt surowego EDID albo użycie Windows DisplayConfig API.
-  - Nie wdrażać niesprawdzonej metody bez testu lokalnego na laptopie, bez dodatkowego monitora.
+- [x] Odczytywać natywną rozdzielczość matrycy zamiast rozdzielczości bieżącej sesji.
+  - Używać największego trybu zgłoszonego przez `WmiMonitorListedSupportedSourceModes`.
+  - Nie używać `System.Windows.Forms.Screen.Bounds`, ponieważ opisuje bieżącą sesję.
+  - Metoda została sprawdzona lokalnie na głównej matrycy NCP002B bez dodatkowego monitora: `1920x1080`.
 
-- [ ] Powiązać wszystkie dane z tym samym fizycznym ekranem.
+- [x] Powiązać wszystkie dane z tym samym fizycznym ekranem.
   - Nie łączyć `Screen.AllScreens` i `WmiMonitorID` na podstawie pozycji na liście.
   - Użyć wspólnego identyfikatora urządzenia lub ścieżki wyświetlacza.
   - Uwzględniać wyłącznie aktywny fizyczny ekran podczas testu głównej matrycy.
 
-- [ ] Poprawić rozpoznawanie matrycy wewnętrznej.
+- [x] Poprawić rozpoznawanie matrycy wewnętrznej.
   - Nie rozpoznawać matrycy wyłącznie na podstawie pustego numeru seryjnego.
   - Wykorzystać typ wyjścia, np. `Internal`, `eDP` albo `LVDS`.
-  - Ustalić zachowanie, gdy sterownik nie udostępnia typu połączenia.
+  - Gdy sterownik nie udostępnia typu połączenia, nie zgadywać na podstawie numeru seryjnego; ostrzec użytkownika i pozostawić wpis do ręcznej korekty w istniejącym edytorze listy.
 
 - [ ] Odczytywać rzeczywisty typ połączenia ekranu.
   - Nie przypisywać każdemu monitorowi wartości `VGA,DVI,DP`.
@@ -68,16 +68,18 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Odczytywać nazwę, numer seryjny, producenta, kod produktu, tydzień i rok produkcji.
   - Nadal zapisywać do PHP tylko pola wymagane przez istniejący format importu.
 
-- [ ] Poprawić obliczanie i prezentację przekątnej.
+- [x] Poprawić obliczanie i prezentację przekątnej.
   - Obliczać przekątną z fizycznej szerokości i wysokości EDID, jeśli są dostępne.
-  - Ustalić zasady zaokrąglania do typowego oznaczenia handlowego, np. `13.9` do `14` cali.
+  - Dopasowywać wynik do typowych przekątnych `10.1`, `11.6`, `12.5`, `13.3`, `14`, `15.6`, `16`, `17.3` i `18` cali z tolerancją `0.35` cala.
+  - Wynik poza tolerancją zachowywać z jednym miejscem po kropce do zatwierdzenia przez użytkownika.
   - Brak wymiarów oznaczać do ręcznej korekty, bez zgadywania na podstawie nazwy laptopa.
 
-- [ ] Poprawić wykrywanie ekranu dotykowego.
+- [x] Poprawić wykrywanie ekranu dotykowego.
   - Nie przypisywać globalnego wyniku `touchscreen` do wszystkich ekranów.
-  - Jeśli nie da się powiązać urządzenia dotykowego z konkretnym panelem, dodawać `touch` wyłącznie do rozpoznanej matrycy wewnętrznej i oznaczyć wynik do zatwierdzenia.
+  - Szukać niezależnego od języka identyfikatora HID `HID_DEVICE_UP:000D_U:0004` i dodawać `touch` wyłącznie do rozpoznanej matrycy wewnętrznej.
+  - Brak urządzenia HID oznacza brak dopisku `touch`; cały wpis nadal podlega zatwierdzeniu w edytorze listy.
 
-- [ ] Rozdzielić obsługę błędów źródeł danych ekranu.
+- [x] Rozdzielić obsługę błędów źródeł danych ekranu.
   - Błąd `WmiMonitorBasicDisplayParams` nie powinien blokować odczytu `WmiMonitorID` ani pozostałych dostępnych informacji.
   - Pokazywać użytkownikowi, których konkretnie danych nie udało się odczytać.
   - Pozwalać przejść do ręcznej edycji niepełnego wpisu matrycy.

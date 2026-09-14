@@ -449,6 +449,167 @@ function Convert-EdidText {
     return (-join @($Values | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ })).Trim()
 }
 
+function Get-OptionalPropertyValue {
+    param(
+        [AllowNull()]$InputObject,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $InputObject) { return $null }
+    $Property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $Property) { return $null }
+    return $Property.Value
+}
+
+function Test-InternalDisplayConnection {
+    param([AllowNull()]$VideoOutputTechnology)
+
+    if ($null -eq $VideoOutputTechnology) { return $false }
+    $Technology = [int64]$VideoOutputTechnology
+    if ($Technology -lt 0) { $Technology += 4294967296 }
+
+    # D3DKMDT: LVDS, embedded DisplayPort, embedded UDI oraz INTERNAL.
+    return $Technology -in @(6, 11, 13, 2147483648)
+}
+
+function Get-DisplaySizeText {
+    param(
+        [AllowNull()]$WidthCm,
+        [AllowNull()]$HeightCm
+    )
+
+    if ($null -eq $WidthCm -or $null -eq $HeightCm -or
+        [double]$WidthCm -le 0 -or [double]$HeightCm -le 0) {
+        return ''
+    }
+
+    $Diagonal = [math]::Sqrt(
+        [math]::Pow([double]$WidthCm, 2) +
+        [math]::Pow([double]$HeightCm, 2)
+    ) / 2.54
+    $OneDecimal = [math]::Round($Diagonal, 1)
+
+    $StandardSizes = @(10.1, 11.6, 12.5, 13.3, 14.0, 15.6, 16.0, 17.3, 18.0)
+    $NearestStandard = $StandardSizes |
+        Sort-Object { [math]::Abs([double]$_ - $Diagonal) } |
+        Select-Object -First 1
+    if ([math]::Abs([double]$NearestStandard - $Diagonal) -le 0.35) {
+        if ([double]$NearestStandard -eq [math]::Truncate([double]$NearestStandard)) {
+            return ('{0}"' -f [int]$NearestStandard)
+        }
+        return ('{0}"' -f ([double]$NearestStandard).ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))
+    }
+
+    return ('{0}"' -f $OneDecimal.ToString('0.0', [Globalization.CultureInfo]::InvariantCulture))
+}
+
+function Test-DisplaySerialNumber {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return $Value.Trim() -notmatch '^(0+|Unknown|None|N/A|Not Specified)$'
+}
+
+function ConvertTo-DisplayParts {
+    param(
+        [AllowEmptyCollection()][object[]]$MonitorIds = @(),
+        [AllowEmptyCollection()][object[]]$DisplayParameters = @(),
+        [AllowEmptyCollection()][object[]]$ConnectionParameters = @(),
+        [AllowEmptyCollection()][object[]]$ModeLists = @(),
+        [bool]$TouchDetected = $false
+    )
+
+    $ParametersByInstance = @{}
+    foreach ($Item in $DisplayParameters) {
+        $InstanceName = [string](Get-OptionalPropertyValue -InputObject $Item -Name 'InstanceName')
+        if (-not [string]::IsNullOrWhiteSpace($InstanceName)) { $ParametersByInstance[$InstanceName] = $Item }
+    }
+    $ConnectionsByInstance = @{}
+    foreach ($Item in $ConnectionParameters) {
+        $InstanceName = [string](Get-OptionalPropertyValue -InputObject $Item -Name 'InstanceName')
+        if (-not [string]::IsNullOrWhiteSpace($InstanceName)) { $ConnectionsByInstance[$InstanceName] = $Item }
+    }
+    $ModesByInstance = @{}
+    foreach ($Item in $ModeLists) {
+        $InstanceName = [string](Get-OptionalPropertyValue -InputObject $Item -Name 'InstanceName')
+        if (-not [string]::IsNullOrWhiteSpace($InstanceName)) { $ModesByInstance[$InstanceName] = $Item }
+    }
+
+    $Parts = New-Object System.Collections.Generic.List[object]
+    foreach ($Monitor in $MonitorIds) {
+        $Active = Get-OptionalPropertyValue -InputObject $Monitor -Name 'Active'
+        if ($null -ne $Active -and -not [bool]$Active) { continue }
+
+        $InstanceName = [string](Get-OptionalPropertyValue -InputObject $Monitor -Name 'InstanceName')
+        $Parameter = $ParametersByInstance[$InstanceName]
+        $Connection = $ConnectionsByInstance[$InstanceName]
+        $ModeList = $ModesByInstance[$InstanceName]
+        $IsInternal = Test-InternalDisplayConnection -VideoOutputTechnology (
+            Get-OptionalPropertyValue -InputObject $Connection -Name 'VideoOutputTechnology'
+        )
+
+        $SizeText = Get-DisplaySizeText `
+            -WidthCm (Get-OptionalPropertyValue -InputObject $Parameter -Name 'MaxHorizontalImageSize') `
+            -HeightCm (Get-OptionalPropertyValue -InputObject $Parameter -Name 'MaxVerticalImageSize')
+
+        $MaximumMode = @(
+            @(Get-OptionalPropertyValue -InputObject $ModeList -Name 'MonitorSourceModes') |
+                Where-Object {
+                    [int](Get-OptionalPropertyValue -InputObject $_ -Name 'HorizontalActivePixels') -gt 0 -and
+                    [int](Get-OptionalPropertyValue -InputObject $_ -Name 'VerticalActivePixels') -gt 0
+                } |
+                Sort-Object @{
+                    Expression = {
+                        [int64](Get-OptionalPropertyValue -InputObject $_ -Name 'HorizontalActivePixels') *
+                        [int64](Get-OptionalPropertyValue -InputObject $_ -Name 'VerticalActivePixels')
+                    }
+                    Descending = $true
+                } |
+                Select-Object -First 1
+        )
+        $Resolution = ''
+        if ($MaximumMode.Count -gt 0) {
+            $Resolution = '{0}x{1}' -f `
+                (Get-OptionalPropertyValue -InputObject $MaximumMode[0] -Name 'HorizontalActivePixels'), `
+                (Get-OptionalPropertyValue -InputObject $MaximumMode[0] -Name 'VerticalActivePixels')
+        }
+
+        $Serial = Convert-EdidText -Values (Get-OptionalPropertyValue -InputObject $Monitor -Name 'SerialNumberID')
+        if (-not (Test-DisplaySerialNumber -Value $Serial)) { $Serial = '' }
+
+        if ($IsInternal) {
+            $Description = (@($SizeText, $Resolution) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
+            if ($TouchDetected) { $Description = "$Description touch".Trim() }
+            if ([string]::IsNullOrWhiteSpace($Description)) { $Description = 'QQ_POPRAW' }
+            $Parts.Add((New-HardwarePart -Type 'Matrix' -Description $Description -Connection 'on board'))
+        }
+        else {
+            $Name = Convert-EdidText -Values (Get-OptionalPropertyValue -InputObject $Monitor -Name 'UserFriendlyName')
+            $Description = (@($SizeText, $Name, $Resolution) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
+            if ([string]::IsNullOrWhiteSpace($Description)) { $Description = 'QQ_POPRAW' }
+            $Parts.Add((New-HardwarePart -Type 'Monitor' -Description $Description -Connection '' -SerialNumber $Serial))
+        }
+    }
+
+    return $Parts.ToArray()
+}
+
+function Test-TouchScreenDetected {
+    if (-not (Get-Command -Name Get-PnpDevice -ErrorAction SilentlyContinue) -or
+        -not (Get-Command -Name Get-PnpDeviceProperty -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    foreach ($Device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop | Where-Object Class -EQ 'HIDClass')) {
+        $HardwareIds = (Get-PnpDeviceProperty `
+            -InstanceId $Device.InstanceId `
+            -KeyName 'DEVPKEY_Device_HardwareIds' `
+            -ErrorAction SilentlyContinue).Data
+        if ($HardwareIds -match 'HID_DEVICE_UP:000D_U:0004') { return $true }
+    }
+    return $false
+}
+
 function New-HardwarePart {
     param(
         [Parameter(Mandatory)][string]$Type,
@@ -737,53 +898,32 @@ function Get-HardwareParts {
 
     $Parts = New-Object System.Collections.Generic.List[object]
 
-    # EKRANY: EDID dostarcza nazwę, numer seryjny i fizyczny rozmiar. Powiązanie
-    # rozdzielczości z EDID jest przybliżone, dlatego wynik zawsze podlega przeglądowi.
-    try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        $Resolutions = @(
-            [System.Windows.Forms.Screen]::AllScreens |
-                ForEach-Object { '{0}x{1}' -f $_.Bounds.Width, $_.Bounds.Height }
-        )
-        $TouchDetected = $false
-        if (Get-Command -Name Get-PnpDevice -ErrorAction SilentlyContinue) {
-            $TouchDetected = $null -ne (Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object FriendlyName -Match 'touch ?screen' | Select-Object -First 1)
-        }
+    # EKRANY: każde źródło WMI jest odczytywane osobno, a rekordy są łączone
+    # wyłącznie po InstanceName. Do PHP dla matrycy trafiają tylko przekątna,
+    # natywna rozdzielczość, opcjonalne `touch` oraz połączenie `on board`.
+    $MonitorIds = @()
+    $DisplayParameters = @()
+    $ConnectionParameters = @()
+    $ModeLists = @()
+    $TouchDetected = $false
+    try { $MonitorIds = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się odczytać identyfikacji ekranów: $($_.Exception.Message)" }
+    try { $DisplayParameters = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się odczytać fizycznego rozmiaru ekranów: $($_.Exception.Message)" }
+    try { $ConnectionParameters = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorConnectionParams -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się odczytać typu połączenia ekranów: $($_.Exception.Message)" }
+    try { $ModeLists = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceModes -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się odczytać natywnej rozdzielczości ekranów: $($_.Exception.Message)" }
+    try { $TouchDetected = Test-TouchScreenDetected }
+    catch { Write-Warning "Nie udało się sprawdzić obsługi dotyku: $($_.Exception.Message)" }
 
-        $DisplayParameters = @{}
-        foreach ($Parameter in @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction Stop)) {
-            $DisplayParameters[[string]$Parameter.InstanceName] = $Parameter
-        }
-
-        $MonitorIndex = 0
-        foreach ($Monitor in @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID -ErrorAction Stop)) {
-            $Name = Convert-EdidText -Values $Monitor.UserFriendlyName
-            $Serial = Convert-EdidText -Values $Monitor.SerialNumberID
-            $Resolution = if ($MonitorIndex -lt $Resolutions.Count) { $Resolutions[$MonitorIndex] } else { '' }
-            $Parameter = $DisplayParameters[[string]$Monitor.InstanceName]
-            $SizeText = ''
-            if ($null -ne $Parameter -and $Parameter.MaxHorizontalImageSize -gt 0 -and $Parameter.MaxVerticalImageSize -gt 0) {
-                $Diagonal = [math]::Sqrt(
-                    [math]::Pow([double]$Parameter.MaxHorizontalImageSize, 2) +
-                    [math]::Pow([double]$Parameter.MaxVerticalImageSize, 2)
-                ) / 2.54
-                $SizeText = ('{0:0.#}"' -f $Diagonal)
-            }
-
-            $IsInternal = [string]::IsNullOrWhiteSpace($Serial)
-            $Type = if ($IsInternal) { 'Matrix' } else { 'Monitor' }
-            $Connection = if ($IsInternal) { 'on board' } else { 'VGA,DVI,DP' }
-            $DescriptionParts = @($SizeText, $Name, $Resolution) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-            $Description = ($DescriptionParts -join ' ').Trim()
-            if ($IsInternal -and $TouchDetected) { $Description += ' touch' }
-            if ([string]::IsNullOrWhiteSpace($Description)) { $Description = 'QQ_POPRAW' }
-
-            $Parts.Add((New-HardwarePart -Type $Type -Description $Description -Connection $Connection -SerialNumber $Serial))
-            $MonitorIndex++
-        }
-    }
-    catch {
-        Write-Warning "Nie udało się odczytać ekranów: $($_.Exception.Message)"
+    foreach ($DisplayPart in @(ConvertTo-DisplayParts `
+        -MonitorIds $MonitorIds `
+        -DisplayParameters $DisplayParameters `
+        -ConnectionParameters $ConnectionParameters `
+        -ModeLists $ModeLists `
+        -TouchDetected $TouchDetected)) {
+        $Parts.Add($DisplayPart)
     }
 
     # PAMIĘĆ RAM: pamięć lutowana jest grupowana, a wymienne moduły pozostają
