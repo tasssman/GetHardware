@@ -1019,6 +1019,39 @@ function Get-DiskInventoryParts {
     return $Parts.ToArray()
 }
 
+function Test-PhysicalGraphicsAdapter {
+    param([Parameter(Mandatory)][psobject]$Graphics)
+
+    $Name = (@(
+        [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')
+        [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Name')
+        [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Description')
+    ) -join ' ').Trim()
+    $SoftwareAdapterPattern = '(?i)Microsoft\s+Remote\s+Display|Microsoft\s+Basic\s+Display|Remote\s+Display|Virtual\s+(?:Display|Graphics)|VirtualBox|VMware\s+SVGA|Hyper-V\s+Video|Citrix.*Display|Parsec.*Display|IddSample'
+    if ($Name -match $SoftwareAdapterPattern) { return $false }
+
+    $PnpDeviceId = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'PNPDeviceID')
+    if ($PnpDeviceId -match '^(?i)ROOT\\(?:RDP|BASICDISPLAY|INDIRECTDISPLAY)') { return $false }
+    return $true
+}
+
+function Get-GraphicsDescription {
+    param([Parameter(Mandatory)][psobject]$Graphics)
+
+    $Caption = ([string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')).Trim()
+    if ([string]::IsNullOrWhiteSpace($Caption)) {
+        $Caption = ([string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Name')).Trim()
+    }
+    $MemoryText = ''
+    $AdapterRam = Get-OptionalPropertyValue -InputObject $Graphics -Name 'AdapterRAM'
+    if ($null -ne $AdapterRam -and [double]$AdapterRam -gt 0) {
+        $MemoryText = "$([math]::Round([double]$AdapterRam / 1MB))MB "
+    }
+    $Description = "$MemoryText$Caption".Trim()
+    if ([string]::IsNullOrWhiteSpace($Description)) { return 'QQ_POPRAW' }
+    return $Description
+}
+
 function New-HardwarePart {
     param(
         [Parameter(Mandatory)][string]$Type,
@@ -1379,15 +1412,25 @@ function Get-HardwareParts {
         Write-Warning "Nie udało się odczytać kart dźwiękowych: $($_.Exception.Message)"
     }
 
-    # GRAFIKA: AdapterRAM w WMI bywa niedokładne dla nowych kart; wartość jest
-    # pokazywana użytkownikowi i może zostać poprawiona przed zapisem.
+    # GRAFIKA: Windows nie udostępnia wiarygodnej listy wszystkich fizycznych
+    # wyjść laptopa. Po odfiltrowaniu adapterów programowych użytkownik wpisuje
+    # złącza dla każdej fizycznej karty; bezpieczną podpowiedzią jest `on board`.
+    # AdapterRAM nadal podlega późniejszej weryfikacji w edytorze podzespołów.
     try {
         foreach ($Graphics in @(Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop)) {
-            $MemoryText = ''
-            if ($null -ne $Graphics.AdapterRAM -and [double]$Graphics.AdapterRAM -gt 0) {
-                $MemoryText = "$([math]::Round([double]$Graphics.AdapterRAM / 1MB))MB "
+            if (-not (Test-PhysicalGraphicsAdapter -Graphics $Graphics)) {
+                $SkippedName = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')
+                Write-Host "Pominięto adapter graficzny: $SkippedName" -ForegroundColor DarkGray
+                continue
             }
-            $Parts.Add((New-HardwarePart -Type 'Graphic Card' -Description "$MemoryText$($Graphics.Caption)" -Connection 'on board,HDMI'))
+
+            $Description = Get-GraphicsDescription -Graphics $Graphics
+            Write-Section -Title 'Wyjścia karty graficznej'
+            Write-Host "Wykryta karta: $Description" -ForegroundColor Green
+            $Connection = Read-TextValue `
+                -Prompt 'Wpisz połączenia/wyjścia graficzne, oddzielając je przecinkami (np. on board,HDMI,DisplayPort,USB-C)' `
+                -Default 'on board'
+            $Parts.Add((New-HardwarePart -Type 'Graphic Card' -Description $Description -Connection $Connection))
         }
     }
     catch {

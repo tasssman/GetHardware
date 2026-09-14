@@ -189,7 +189,10 @@ function Get-CimInstance {
             return [pscustomobject]@{ Caption = 'Test audio' }
         }
         'Win32_VideoController' {
-            return [pscustomobject]@{ AdapterRAM = 1GB; Caption = 'Test graphics' }
+            return @(
+                [pscustomobject]@{ AdapterRAM = 1GB; Caption = 'Test graphics'; PNPDeviceID = 'PCI\VEN_8086&DEV_TEST' }
+                [pscustomobject]@{ AdapterRAM = 0; Caption = 'Microsoft Remote Display Adapter'; PNPDeviceID = 'ROOT\RDPIDD' }
+            )
         }
         'Win32_Battery' {
             return [pscustomobject]@{ Name = 'Internal Battery'; Description = 'Battery' }
@@ -325,12 +328,16 @@ $CustomMainboard = Resolve-MainboardDescription `
     -Version ''
 Assert-True -Condition ($CustomMainboard -eq "Custom baseboard A01 ($($TestModelEntry.memorySpec))") -Message 'The user should be able to replace the baseboard fallback.'
 
+$script:MockReadHostValue = ''
+$script:MockReadHostQueue.Enqueue('on board,HDMI,USB-C')
 $DetectedMockParts = @(Get-HardwareParts -ComputerModel 'Latitude 7420')
 Assert-True -Condition ($DetectedMockParts.Count -eq 7) -Message 'The mocked hardware scan should return all seven component categories.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Matrix').Desc -eq '14" 1920x1080') -Message 'The mocked scan should include the EDID-based matrix description.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'RAM').Count -eq 1) -Message 'The mocked scan should include RAM.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Count -eq 1) -Message 'The mocked scan should include a disk.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The mocked scan should use Get-PhysicalDisk data.'
+Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Count -eq 1) -Message 'Software and remote display adapters should be excluded.'
+Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Conn -eq 'on board,HDMI,USB-C') -Message 'The user-entered graphics outputs should be preserved.'
 
 $Inventory = [pscustomobject]@{
     ServiceTag    = '13QJ7D3'

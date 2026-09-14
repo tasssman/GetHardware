@@ -272,17 +272,19 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Dla zintegrowanego GPU domyślnie pomijać liczbę MB w `desc` albo jednoznacznie oznaczać pamięć jako współdzieloną.
   - Dla dedykowanego GPU dodawać do `desc` ilość rzeczywistej pamięci dedykowanej, jeśli została wiarygodnie odczytana przez DXGI.
 
-- [ ] Klasyfikować i filtrować adaptery graficzne.
+- [x] Filtrować fizyczne adaptery graficzne.
   - Zachować osobny wpis dla każdego fizycznego GPU, np. Intel oraz NVIDIA/AMD w laptopie hybrydowym.
   - Odfiltrować adaptery zdalne, programowe oraz `Microsoft Basic Display Adapter`, ale pokazywać użytkownikowi informację o ich pominięciu.
   - Nie uznawać obecności kilku kontrolerów za błąd.
+
+- [ ] Klasyfikować fizyczne adaptery jako zintegrowane lub dedykowane.
   - Ostrożnie rozpoznawać grafikę zintegrowaną i dedykowaną; nie opierać klasyfikacji wyłącznie na nazwie lub ilości raportowanej pamięci.
 
-- [ ] Poprawić ustalanie rodzaju połączenia karty graficznej.
+- [x] Poprawić ustalanie rodzaju połączenia karty graficznej.
   - Nie przypisywać każdej karcie stałej wartości `on board,HDMI`.
   - Uwzględnić, że złącza HDMI, DisplayPort i USB-C są cechą całego laptopa, płyty lub stacji dokującej i nie zawsze można je jednoznacznie przypisać do konkretnego GPU.
-  - Uwzględnić wewnętrzne połączenie matrycy, np. eDP, oraz konfiguracje hybrydowe, w których dedykowany GPU renderuje obraz przekazywany przez GPU zintegrowany.
-  - Do czasu wiarygodnego ustalania złączy używać bezpiecznego `conn'=>'on board'` i pozostawić możliwość ręcznej korekty.
+  - Po wykryciu każdej fizycznej karty pytać użytkownika o połączenia/wyjścia, z podpowiedzią `on board` oraz przykładami `HDMI`, `DisplayPort` i `USB-C`.
+  - Zapisywać odpowiedź bezpośrednio w polu `conn`; nie próbować automatycznie wyliczać wszystkich gniazd maszyny.
 
 - [ ] Rozszerzyć dane GPU dostępne podczas weryfikacji.
   - Pokazywać nazwę adaptera, `PNPDeviceID`, procesor graficzny, wersję i datę sterownika.
