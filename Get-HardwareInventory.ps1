@@ -320,6 +320,95 @@ function Get-ProcessorClockSpeedMhz {
     return $FallbackSpeed
 }
 
+function Get-ChassisTypeName {
+    param([int]$Code)
+
+    switch ($Code) {
+        1 { return 'Other' }
+        2 { return 'Unknown' }
+        3 { return 'Desktop' }
+        4 { return 'Low Profile Desktop' }
+        5 { return 'Pizza Box' }
+        6 { return 'Mini Tower' }
+        7 { return 'Tower' }
+        8 { return 'Portable' }
+        9 { return 'Laptop' }
+        10 { return 'Notebook' }
+        11 { return 'Hand Held' }
+        12 { return 'Docking Station' }
+        13 { return 'All in One' }
+        14 { return 'Sub Notebook' }
+        15 { return 'Space-Saving' }
+        16 { return 'Lunch Box' }
+        17 { return 'Main System Chassis' }
+        18 { return 'Expansion Chassis' }
+        19 { return 'SubChassis' }
+        20 { return 'Bus Expansion Chassis' }
+        21 { return 'Peripheral Chassis' }
+        22 { return 'Storage Chassis' }
+        23 { return 'Rack Mount Chassis' }
+        24 { return 'Sealed-Case PC' }
+        30 { return 'Tablet' }
+        31 { return 'Convertible' }
+        32 { return 'Detachable' }
+        default { return "Nieznany kod $Code" }
+    }
+}
+
+function ConvertFrom-ChassisTypes {
+    param([AllowNull()]$ChassisTypes)
+
+    $Codes = @($ChassisTypes | ForEach-Object { [int]$_ } | Select-Object -Unique)
+    $MappedTypes = @(
+        foreach ($Code in $Codes) {
+            switch ($Code) {
+                { $_ -in @(8, 9, 10, 14, 31) } { 'laptop'; break }
+                { $_ -in @(11, 30, 32) } { 'tablet'; break }
+                { $_ -in @(3, 4, 5, 6, 7, 13, 15, 16, 24) } { 'desktop'; break }
+                17 { 'server'; break }
+                22 { 'storage'; break }
+                23 { 'server'; break }
+            }
+        }
+    )
+    $MappedTypes = @($MappedTypes | Select-Object -Unique)
+    $DetectedType = if ($MappedTypes.Count -eq 1) { [string]$MappedTypes[0] } else { '' }
+    $Description = if ($Codes.Count -gt 0) {
+        (@($Codes | ForEach-Object { '{0} ({1})' -f (Get-ChassisTypeName -Code $_), $_ })) -join ', '
+    } else {
+        'Nieznany'
+    }
+
+    return [pscustomobject]@{
+        Codes          = $Codes
+        Description    = $Description
+        DetectedType   = $DetectedType
+        IsUnambiguous  = -not [string]::IsNullOrWhiteSpace($DetectedType)
+    }
+}
+
+function Resolve-DeviceType {
+    param(
+        [Parameter(Mandatory)][string]$DatabaseDeviceType,
+        [AllowNull()][string]$DetectedDeviceType,
+        [Parameter(Mandatory)][string]$ChassisDescription
+    )
+
+    $DatabaseType = $DatabaseDeviceType.Trim().ToLowerInvariant()
+    $DetectedType = ([string]$DetectedDeviceType).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($DetectedType) -or $DetectedType -eq $DatabaseType) {
+        return $DatabaseType
+    }
+
+    Write-Section -Title 'Niezgodny typ urządzenia'
+    Write-Warning "Typ urządzenia w JSON ('$DatabaseType') jest sprzeczny z obudową SMBIOS '$ChassisDescription' ('$DetectedType')."
+    Write-Host '[1] Zachowaj wartość z JSON'
+    Write-Host '[2] Użyj wykrytej wartości tylko dla tego urządzenia'
+    $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+    if ($Choice -eq 2) { return $DetectedType }
+    return $DatabaseType
+}
+
 function Get-SystemOverview {
     Write-Section -Title 'Odczyt danych komputera'
 
@@ -353,6 +442,15 @@ function Get-SystemOverview {
         Write-Warning "Nie udało się odczytać płyty głównej z Win32_BaseBoard: $($_.Exception.Message)"
     }
 
+    $Enclosure = $null
+    try {
+        $Enclosure = Get-CimInstance -ClassName Win32_SystemEnclosure -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać typu obudowy z Win32_SystemEnclosure: $($_.Exception.Message)"
+    }
+
     $Processors = @()
     try {
         $Processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
@@ -376,6 +474,9 @@ function Get-SystemOverview {
     if ($null -ne $Bios) {
         $ServiceTag = ([string]$Bios.SerialNumber).Trim()
     }
+    $Chassis = ConvertFrom-ChassisTypes -ChassisTypes $(
+        if ($null -ne $Enclosure) { $Enclosure.ChassisTypes } else { @() }
+    )
 
     return [pscustomobject]@{
         ServiceTag     = $ServiceTag
@@ -387,6 +488,9 @@ function Get-SystemOverview {
         BaseBoardManufacturer = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Manufacturer).Trim() } else { '' }
         BaseBoardProduct      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Product).Trim() } else { '' }
         BaseBoardVersion      = if ($null -ne $BaseBoard) { ([string]$BaseBoard.Version).Trim() } else { '' }
+        ChassisTypeCodes       = $Chassis.Codes
+        ChassisDescription     = $Chassis.Description
+        DetectedDeviceType     = $Chassis.DetectedType
     }
 }
 
@@ -1737,6 +1841,19 @@ function Show-InventorySummary {
     Write-Host "Podzespoły:    $($Parts.Count)"
     Write-Host "Plik sprzętu:  $(Join-Path $Collection.Path "$($Inventory.ServiceTag).php")"
     Write-Host "Plik zbiorczy: $(Join-Path $Collection.Path "$($Collection.Name).php")"
+
+    $IdentifierSuffix = if ($Inventory.DeviceType -in @('laptop', 'tablet')) { '_laptop' } else { '' }
+    Write-Section -Title 'Typ urządzenia'
+    Write-Host "Typ z bazy modeli:  $($Inventory.DatabaseDeviceType)"
+    Write-Host "Typ obudowy SMBIOS: $($Inventory.ChassisDescription)"
+    $DetectedText = if ([string]::IsNullOrWhiteSpace([string]$Inventory.DetectedDeviceType)) {
+        'Nieznany'
+    } else {
+        [string]$Inventory.DetectedDeviceType
+    }
+    Write-Host "Typ wykryty:         $DetectedText"
+    Write-Host "Typ użyty w PHP:     $($Inventory.DeviceType)" -ForegroundColor Green
+    Write-Host "Identyfikator PHP:   $($Inventory.ServiceTag)$IdentifierSuffix"
 }
 
 function Invoke-HardwareInventory {
@@ -1748,6 +1865,10 @@ function Invoke-HardwareInventory {
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
     Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
     $ModelEntry = Wait-ForKnownModel -Model $System.Model -DatabasePath $ModelDatabasePath
+    $ResolvedDeviceType = Resolve-DeviceType `
+        -DatabaseDeviceType ([string]$ModelEntry.deviceType) `
+        -DetectedDeviceType $System.DetectedDeviceType `
+        -ChassisDescription $System.ChassisDescription
     $MemoryInventory = Get-MemoryInventory
     $MemorySpec = Resolve-MemorySpec `
         -ModelEntry $ModelEntry `
@@ -1826,7 +1947,10 @@ function Invoke-HardwareInventory {
             Room          = $Manual.Room
             Other         = [string]$ModelEntry.other
             Note          = $Manual.Note
-            DeviceType    = [string]$ModelEntry.deviceType
+            DatabaseDeviceType = [string]$ModelEntry.deviceType
+            ChassisDescription = $System.ChassisDescription
+            DetectedDeviceType = $System.DetectedDeviceType
+            DeviceType    = $ResolvedDeviceType
         }
 
         Show-InventorySummary -Inventory $Inventory -Parts $Parts -Collection $Collection

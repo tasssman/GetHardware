@@ -34,9 +34,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Nie używać zmiennego `CurrentClockSpeed` i nie odejmować sztucznie `1 MHz`.
   - Przykładowa wartość `1804` wynikała ze starego działania `MaxClockSpeed - 1` i nie była wiarygodną specyfikacją procesora.
 
-- [ ] Odczytywać typ obudowy z `Win32_SystemEnclosure.ChassisTypes`.
-  - Użyć go jako dodatkowej kontroli `deviceType` z `hardware-models.json`.
-  - Ostrzegać użytkownika, gdy automatycznie wykryty typ urządzenia jest sprzeczny z bazą modeli.
+- [x] Odczytywać typ obudowy z `Win32_SystemEnclosure.ChassisTypes`.
+  - Używać go jako dodatkowej kontroli `deviceType` z `hardware-models.json`, bez automatycznej zmiany bazy.
+  - Przy wiarygodnej sprzeczności pozwalać zachować typ z JSON albo użyć wykrytego typu tylko dla bieżącego urządzenia.
+  - Dla wartości nieznanej lub niejednoznacznej zachowywać typ z JSON bez pytania.
+  - W końcowym podsumowaniu pokazywać w osobnej sekcji typ z bazy, opis obudowy SMBIOS z kodem, typ wykryty, typ użyty w PHP oraz końcowy identyfikator `addComp()`.
 
 ### Wykrywanie ekranu i matrycy
 

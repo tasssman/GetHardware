@@ -103,6 +103,13 @@ function Get-CimInstance {
                 Version      = 'A00'
             }
         }
+        'Win32_SystemEnclosure' {
+            return [pscustomobject]@{
+                Manufacturer = 'Dell Inc.'
+                SerialNumber = '13QJ7D3'
+                ChassisTypes = [uint16[]](10)
+            }
+        }
         'Win32_Processor' {
             return [pscustomobject]@{
                 Name          = 'Test CPU'
@@ -195,6 +202,8 @@ $SystemOverview = Get-SystemOverview
 Assert-True -Condition ($SystemOverview.ServiceTag -eq '13QJ7D3') -Message 'The system overview should read the BIOS serial number.'
 Assert-True -Condition ($SystemOverview.Model -eq 'Latitude 7420') -Message 'The system overview should read the computer model.'
 Assert-True -Condition ($SystemOverview.BaseBoardProduct -eq '0FFCXR') -Message 'The system overview should read the baseboard product.'
+Assert-True -Condition ($SystemOverview.ChassisDescription -eq 'Notebook (10)') -Message 'The system overview should expose the SMBIOS chassis name and code.'
+Assert-True -Condition ($SystemOverview.DetectedDeviceType -eq 'laptop') -Message 'Notebook chassis type 10 should map to laptop.'
 
 $script:FailedCimClass = 'Win32_BIOS'
 $SystemWithoutBios = Get-SystemOverview
@@ -289,6 +298,11 @@ function Read-Host {
     return $script:MockReadHostValue
 }
 
+Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'laptop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'Matching device types should be accepted without a question.'
+$script:MockReadHostQueue.Enqueue('2')
+Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'desktop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'The user should be able to use the detected type for the current device.'
+Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'server' -DetectedDeviceType '' -ChassisDescription 'Unknown (2)') -eq 'server') -Message 'An unknown chassis type should preserve the database value without a question.'
+
 $script:MockDiskFormFactorName = 'Unknown'
 $UnknownFormatDiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
 Assert-True -Condition ($UnknownFormatDiskPart.Conn -eq 'M.2') -Message 'An unknown NVMe form factor should offer and accept M.2 as the default.'
@@ -335,6 +349,9 @@ $Inventory = [pscustomobject]@{
     Room          = 'A216'
     Other         = 'USB-C'
     Note          = 'SCC:21393;REFURBISHED;'
+    DatabaseDeviceType = 'laptop'
+    ChassisDescription = 'Notebook (10)'
+    DetectedDeviceType = 'laptop'
     DeviceType    = 'laptop'
 }
 $Parts = @(
