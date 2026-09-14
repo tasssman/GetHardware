@@ -67,7 +67,11 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 }
 ```
 
-Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie. Skrypt waliduje JSON przy wczytywaniu, ale nigdy nie zmienia go automatycznie.
+Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie.
+
+Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy użytkownik może użyć wartości wykrytej, zachować wartość z bazy albo wpisać własną. Aktualizacja `memorySpec` w JSON-ie następuje tylko po jednoznacznym wyborze użytkownika i jest wykonywana przez zweryfikowany plik tymczasowy.
+
+Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on board'` i poprawnym numerem seryjnym. Rekordy pamięci lutowanej są grupowane w jeden wpis z `conn'=>'soldered'`. Wartości zastępcze, takie jak `00000000`, nie trafiają do `sn`.
 
 ## Walidacja danych ręcznych
 

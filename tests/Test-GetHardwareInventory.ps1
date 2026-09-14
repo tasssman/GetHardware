@@ -87,8 +87,19 @@ function Get-CimInstance {
                 ConfiguredClockSpeed = 3200
                 Speed                = 3200
                 SMBIOSMemoryType     = 26
+                FormFactor           = 12
                 DeviceLocator        = 'DIMM A'
                 BankLabel            = 'BANK 0'
+                SerialNumber         = '16596967'
+            }
+        }
+        'Win32_PhysicalMemoryArray' {
+            return [pscustomobject]@{
+                MemoryDevices = 2
+                MaxCapacity   = 33554432
+                MaxCapacityEx = 33554432
+                Location      = 3
+                Use           = 3
             }
         }
         'Win32_DiskDrive' {
@@ -132,21 +143,66 @@ Assert-True -Condition ($SystemWithoutBios.Processor -eq 'Test CPU') -Message 'A
 $script:FailedCimClass = $null
 
 $TestModelEntry = $Models | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
+
+$SlotMemory = ConvertTo-MemoryInventory `
+    -MemoryDevices @(
+        [pscustomobject]@{ Capacity = 16GB; Speed = 3200; ConfiguredClockSpeed = 2933; SMBIOSMemoryType = 26; FormFactor = 12; DeviceLocator = 'DIMM A'; BankLabel = ''; SerialNumber = '16596967' }
+        [pscustomobject]@{ Capacity = 16GB; Speed = 3200; ConfiguredClockSpeed = 2933; SMBIOSMemoryType = 26; FormFactor = 12; DeviceLocator = 'DIMM C'; BankLabel = ''; SerialNumber = '16596D3D' }
+    ) `
+    -MemoryArrays @(
+        [pscustomobject]@{ MemoryDevices = 4; MaxCapacity = 134217728; MaxCapacityEx = 134217728; Location = 3; Use = 3 }
+    )
+Assert-True -Condition ($SlotMemory.Parts.Count -eq 2) -Message 'Replaceable RAM modules should remain separate PHP parts.'
+Assert-True -Condition ($SlotMemory.Parts[0].Desc -eq '16GB 3200MHz DDR4') -Message 'RAM parts should use rated Speed instead of ConfiguredClockSpeed.'
+Assert-True -Condition ($SlotMemory.Parts[0].Conn -eq 'on board') -Message 'Replaceable RAM should use the agreed on board connection.'
+Assert-True -Condition ($SlotMemory.Parts[0].Sn -eq '16596967') -Message 'A valid RAM serial number should be preserved.'
+Assert-True -Condition ($SlotMemory.DetectedSpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'Slot count and maximum capacity should form memorySpec.'
+
+$MemoryWithInvalidRecord = ConvertTo-MemoryInventory `
+    -MemoryDevices @(
+        [pscustomobject]@{ Capacity = 16GB; Speed = 3200; ConfiguredClockSpeed = 2933; SMBIOSMemoryType = 26; FormFactor = 12; DeviceLocator = 'DIMM A'; BankLabel = ''; SerialNumber = '16596967' }
+        [pscustomobject]@{ DeviceLocator = 'BROKEN DIMM' }
+    ) `
+    -MemoryArrays @()
+Assert-True -Condition ($MemoryWithInvalidRecord.Parts.Count -eq 1) -Message 'An invalid RAM record should not discard valid modules.'
+
+$SolderedDevices = @(
+    for ($Index = 0; $Index -lt 8; $Index++) {
+        [pscustomobject]@{ Capacity = 2GB; Speed = 4267; ConfiguredClockSpeed = 4267; SMBIOSMemoryType = 30; FormFactor = 0; DeviceLocator = 'Motherboard'; BankLabel = "BANK $($Index % 4)"; SerialNumber = '00000000' }
+    }
+)
+$SolderedMemory = ConvertTo-MemoryInventory `
+    -MemoryDevices $SolderedDevices `
+    -MemoryArrays @(
+        [pscustomobject]@{ MemoryDevices = 8; MaxCapacity = 16777216; MaxCapacityEx = 16777216; Location = 3; Use = 3 }
+    )
+Assert-True -Condition ($SolderedMemory.Parts.Count -eq 1) -Message 'Soldered memory chips should be grouped into one PHP part.'
+Assert-True -Condition ($SolderedMemory.Parts[0].Desc -eq '16GB 4267MHz LPDDR4') -Message 'Grouped soldered memory should contain total capacity, rated speed, and type.'
+Assert-True -Condition ($SolderedMemory.Parts[0].Conn -eq 'soldered') -Message 'Motherboard LPDDR memory should be marked as soldered.'
+Assert-True -Condition ($SolderedMemory.Parts[0].Sn -eq '') -Message 'Placeholder RAM serial numbers should be discarded.'
+Assert-True -Condition ($SolderedMemory.DetectedSpec -eq 'LPDDR4 4267MHz soldered, max16GB') -Message 'Soldered memorySpec should not treat memory devices as slots.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
+    -MemorySpec ([string]$TestModelEntry.memorySpec) `
     -Manufacturer $SystemOverview.BaseBoardManufacturer `
     -Product $SystemOverview.BaseBoardProduct `
     -Version $SystemOverview.BaseBoardVersion
 Assert-True -Condition ($DetectedMainboard -eq "Dell Inc. 0FFCXR A00 ($($TestModelEntry.memorySpec))") -Message 'Detected baseboard data should be combined with memorySpec.'
 
 $script:MockReadHostValue = ''
+$script:MockReadHostQueue = New-Object System.Collections.Generic.Queue[string]
 function Read-Host {
     param([string]$Prompt)
+    if ($script:MockReadHostQueue.Count -gt 0) {
+        return $script:MockReadHostQueue.Dequeue()
+    }
     return $script:MockReadHostValue
 }
 
 $FallbackMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
+    -MemorySpec ([string]$TestModelEntry.memorySpec) `
     -Manufacturer '' `
     -Product '' `
     -Version ''
@@ -155,6 +211,7 @@ Assert-True -Condition ($FallbackMainboard -eq "Latitude 7420 ($($TestModelEntry
 $script:MockReadHostValue = 'Custom baseboard A01'
 $CustomMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
+    -MemorySpec ([string]$TestModelEntry.memorySpec) `
     -Manufacturer '' `
     -Product 'Unknown' `
     -Version ''
@@ -236,6 +293,21 @@ try {
     $DeviceBytes = [IO.File]::ReadAllBytes($Saved.DevicePath)
     $HasUtf8Bom = $DeviceBytes.Length -ge 3 -and $DeviceBytes[0] -eq 0xEF -and $DeviceBytes[1] -eq 0xBB -and $DeviceBytes[2] -eq 0xBF
     Assert-True -Condition (-not $HasUtf8Bom) -Message 'Generated PHP should be UTF-8 without BOM.'
+
+    $TestModelDatabase = Join-Path $TestOutputRoot 'hardware-models.json'
+    [IO.File]::Copy((Join-Path $ProjectRoot 'hardware-models.json'), $TestModelDatabase)
+    $TestModelsBeforeMemoryUpdate = @(Import-ModelDatabase -Path $TestModelDatabase)
+    $TestModelBeforeMemoryUpdate = $TestModelsBeforeMemoryUpdate | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
+    $script:MockReadHostQueue.Enqueue('1')
+    $ResolvedMemorySpec = Resolve-MemorySpec `
+        -ModelEntry $TestModelBeforeMemoryUpdate `
+        -MemoryInventory $SlotMemory `
+        -DatabasePath $TestModelDatabase
+    Assert-True -Condition ($ResolvedMemorySpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'The detected memorySpec should be selected for the current PHP record.'
+    $UpdatedModels = @(Import-ModelDatabase -Path $TestModelDatabase)
+    $UpdatedModel = $UpdatedModels | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
+    Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'Only the selected model memorySpec should be updated in JSON.'
+    Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
     $ExistingTestCollection = [pscustomobject]@{
         Name  = $TestCollection.Name

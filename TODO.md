@@ -18,7 +18,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Zebrać `Manufacturer`, `Product`, `Version` i `SerialNumber`.
   - Wyświetlić kod płyty użytkownikowi podczas weryfikacji.
   - Porównać odczytany produkt płyty z awaryjnym opisem `baseboardFallback` w ręcznej bazie modeli.
-  - Do PHP trafiają producent, produkt i wersja płyty połączone z ręcznym `memorySpec`.
+  - Do PHP trafiają producent, produkt i wersja płyty połączone z wykrytym lub zatwierdzonym `memorySpec`.
   - Przy braku produktu skrypt proponuje `baseboardFallback` z JSON-u i pozwala go zatwierdzić lub zmienić.
   - Numer seryjny, status i pozostałe pola techniczne nie są wyświetlane ani zapisywane.
 
@@ -37,10 +37,6 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [ ] Odczytywać typ obudowy z `Win32_SystemEnclosure.ChassisTypes`.
   - Użyć go jako dodatkowej kontroli `deviceType` z `hardware-models.json`.
   - Ostrzegać użytkownika, gdy automatycznie wykryty typ urządzenia jest sprzeczny z bazą modeli.
-
-- [ ] Rozważyć dodatkowe dane diagnostyczne BIOS-u.
-  - Możliwe pola: `BIOSVersion`, `ReleaseDate` i `SMBIOSBIOSVersion`.
-  - Domyślnie wykorzystywać je tylko diagnostycznie, bez dodawania do PHP.
 
 ### Wykrywanie ekranu i matrycy
 
@@ -88,41 +84,42 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Pamięć RAM
 
-- [ ] Po opracowaniu odczytu RAM uzupełnić sposób budowania pola `mainb`.
+- [x] Po opracowaniu odczytu RAM uzupełnić sposób budowania pola `mainb`.
   - Połączyć rzeczywiste dane płyty z `Win32_BaseBoard` z opisem obsługiwanej konfiguracji pamięci RAM.
   - Zachować format zbliżony do `Latitude 7420 (DDR3L 1600MHz x2, max8GB)`.
-  - Ustalić, które informacje o typie pamięci, liczbie slotów i maksymalnej pojemności można odczytać automatycznie, a które nadal muszą pochodzić z ręcznej bazy modeli.
+  - Typ, znamionowa szybkość, liczba urządzeń pamięci i maksymalna pojemność są odczytywane automatycznie, gdy dane SMBIOS są jednoznaczne.
+  - Przy różnicy względem `memorySpec` użytkownik wybiera wartość dla PHP i decyduje, czy zaktualizować JSON.
   - Nie mylić aktualnie zainstalowanej pamięci z maksymalną pamięcią obsługiwaną przez płytę główną.
 
-- [ ] Poprawić rozpoznawanie pamięci lutowanej i wymiennej.
+- [x] Poprawić rozpoznawanie pamięci lutowanej i wymiennej.
   - Obecne wyszukiwanie słów `onboard`, `on board` i `solder` w `DeviceLocator` oraz `BankLabel` jest tylko heurystyką.
   - Wykorzystać także `FormFactor`, `DeviceLocator`, `BankLabel` i dane konkretnego modelu.
-  - Traktować automatyczne `soldered` jako wartość wymagającą potwierdzenia, jeśli SMBIOS nie dostarcza jednoznacznych danych.
-  - Rozważyć dodanie do `hardware-models.json` pola opisującego układ lub sposób montażu RAM.
+  - Grupować rekordy pamięci lutowanej w jeden wpis i nie interpretować `MemoryDevices` jako liczby slotów.
+  - Dla modułów niewlutowanych zapisywać uzgodnione `conn'=>'on board'`.
+  - Niejednoznaczne lub mieszane dane kierować do interaktywnego wyboru `memorySpec`.
 
-- [ ] Rozszerzyć mapowanie `SMBIOSMemoryType`.
+- [x] Rozszerzyć mapowanie `SMBIOSMemoryType`.
   - Uwzględnić brakujące typy, m.in. DDR2 FB-DIMM, LPDDR, LPDDR2, LPDDR3 oraz HBM.
-  - Dla nieznanego kodu wyświetlać kod liczbowy diagnostycznie zamiast całkowicie pomijać typ.
+  - Uwzględniono DDR, DDR2, DDR3, FB-DIMM, DDR4, LPDDR–LPDDR5, HBM–HBM3 i DDR5.
+  - Nieznanego kodu nie dodawać do PHP; użytkownik może poprawić gotowy wpis RAM w interaktywnym przeglądzie.
 
-- [ ] Przetwarzać każdy moduł RAM niezależnie.
+- [x] Przetwarzać każdy moduł RAM niezależnie.
   - Błąd lub brak właściwości jednego wpisu SMBIOS nie powinien usuwać z wyniku wszystkich pozostałych modułów.
   - Pokazywać ostrzeżenie dotyczące konkretnego lokalizatora lub banku.
 
-- [ ] Rozszerzyć dane RAM dostępne podczas weryfikacji.
-  - Odczytywać `Manufacturer`, `PartNumber`, `SerialNumber`, `DeviceLocator`, `BankLabel` i `FormFactor`.
-  - Pokazywać osobno `Speed` oraz `ConfiguredClockSpeed`.
-  - Odczytywać `DataWidth` i `TotalWidth`, aby rozpoznać pamięć ECC, jeśli SMBIOS podaje wiarygodne wartości.
-  - Rozważyć pokazanie `ConfiguredVoltage`, `MinVoltage` i `MaxVoltage` wyłącznie diagnostycznie.
-  - Wyświetlać podsumowanie całkowitej pojemności i liczby wykrytych modułów.
+- [x] Ustalić zakres danych RAM używanych w PHP.
+  - Używać `Capacity`, `Speed`, `SMBIOSMemoryType`, `DeviceLocator`, `BankLabel`, `FormFactor` i poprawnego `SerialNumber`.
+  - `Speed` jest wartością podstawową, a `ConfiguredClockSpeed` wyłącznie wartością awaryjną.
+  - Nie dodawać do PHP identyfikatora producenta JEDEC, numeru części, napięć ani pozostałych danych diagnostycznych.
 
-- [ ] Filtrować niewiarygodne dane identyfikacyjne RAM.
+- [x] Filtrować niewiarygodne dane identyfikacyjne RAM.
   - Usuwać spacje z początku i końca producenta, numeru części i numeru seryjnego.
   - Traktować wartości puste, `00000000`, `FFFFFFFF` i typowe teksty zastępcze jako brak danych.
 
-- [ ] Ustalić docelowy format opisu RAM w PHP.
-  - Zdecydować, czy `desc` ma zawierać typ pamięci, np. `16GB 3733Mhz LPDDR4`, czy zachować krótszy format `16GB 3733Mhz`.
-  - Zdecydować, czy producent i numer części mają być tylko widoczne w konsoli, czy również dodawane do `desc`.
-  - Zdecydować, czy numer seryjny modułu RAM ma trafiać do opcjonalnego pola `sn`.
+- [x] Ustalić docelowy format opisu RAM w PHP.
+  - Używać formatu `16GB 3200MHz DDR4`.
+  - Każdy moduł wymienny zapisywać osobno z `conn'=>'on board'` i poprawnym numerem seryjnym w `sn`.
+  - Rekordy pamięci lutowanej grupować według typu i szybkości, zapisywać z `conn'=>'soldered'` oraz bez wspólnego numeru seryjnego.
   - Zachować krótki i przewidywalny format wymagany przez istniejący import PHP.
 
 ### Dyski
@@ -378,7 +375,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 - [ ] Poprawić zbieranie danych o podzespołach.
   - Nie oznaczać każdego dysku jako `M.2`; wykorzystać rzeczywisty typ magistrali/interfejsu.
-  - Nie oznaczać każdego modułu RAM jako `on board`; wykorzystać informacje o slocie i typie pamięci.
+  - Pamięć lutowaną oznaczać jako `soldered`, a zgodnie z wymaganiem importu każdy moduł niewlutowany jako `on board`.
   - Nie przypisywać każdej karcie graficznej połączenia `on board,HDMI`.
   - Odfiltrować Bluetooth, WAN i inne adaptery, jeśli nie powinny być rejestrowane jako karty sieciowe.
   - Zweryfikować wiarygodność `AdapterRAM` dla współczesnych kart graficznych.

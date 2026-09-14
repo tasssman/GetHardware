@@ -414,6 +414,7 @@ function Join-MainboardDescription {
 function Resolve-MainboardDescription {
     param(
         [Parameter(Mandatory)][psobject]$ModelEntry,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$MemorySpec,
         [AllowNull()][string]$Manufacturer,
         [AllowNull()][string]$Product,
         [AllowNull()][string]$Version
@@ -438,7 +439,7 @@ function Resolve-MainboardDescription {
 
     return Join-MainboardDescription `
         -BaseBoardDescription $BaseBoardDescription `
-        -MemorySpec ([string]$ModelEntry.memorySpec)
+        -MemorySpec $MemorySpec
 }
 
 function Convert-EdidText {
@@ -471,16 +472,268 @@ function Get-MemoryTypeName {
         20 { return 'DDR' }
         21 { return 'DDR2' }
         24 { return 'DDR3' }
+        25 { return 'FB-DIMM' }
         26 { return 'DDR4' }
+        27 { return 'LPDDR' }
+        28 { return 'LPDDR2' }
+        29 { return 'LPDDR3' }
         30 { return 'LPDDR4' }
+        32 { return 'HBM' }
+        33 { return 'HBM2' }
         34 { return 'DDR5' }
         35 { return 'LPDDR5' }
+        36 { return 'HBM3' }
         default { return '' }
     }
 }
 
+function Test-MemorySerialNumber {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    $Normalized = $Value.Trim()
+    return $Normalized -notmatch '^(0+|F+|Unknown|None|N/A|Default string|Not Specified)$'
+}
+
+function Get-MemoryPlacement {
+    param([Parameter(Mandatory)][psobject]$Memory)
+
+    $Locator = "$($Memory.DeviceLocator) $($Memory.BankLabel)".Trim()
+    if ($Locator -match '(?i)motherboard|system\s*board|on\s*board|onboard|solder') {
+        return 'soldered'
+    }
+    if ([int]$Memory.FormFactor -in @(8, 12) -or $Locator -match '(?i)\bSO-?DIMM\b|\bDIMM\b|\bslot\b') {
+        return 'slot'
+    }
+    return 'unknown'
+}
+
+function ConvertTo-MemoryInventory {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$MemoryDevices,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$MemoryArrays
+    )
+
+    $NormalizedDevices = New-Object System.Collections.Generic.List[object]
+    foreach ($Memory in $MemoryDevices) {
+        try {
+            $CapacityGb = [math]::Round([double]$Memory.Capacity / 1GB, 2)
+            $RatedSpeed = if ([int]$Memory.Speed -gt 0) { [int]$Memory.Speed } else { [int]$Memory.ConfiguredClockSpeed }
+            $MemoryType = Get-MemoryTypeName -SmbiosMemoryType ([int]$Memory.SMBIOSMemoryType)
+            $Placement = Get-MemoryPlacement -Memory $Memory
+            $SerialNumber = if (Test-MemorySerialNumber -Value ([string]$Memory.SerialNumber)) {
+                ([string]$Memory.SerialNumber).Trim()
+            }
+            else {
+                ''
+            }
+
+            $NormalizedDevices.Add([pscustomobject]@{
+                CapacityGb  = $CapacityGb
+                SpeedMhz    = $RatedSpeed
+                MemoryType  = $MemoryType
+                Placement   = $Placement
+                SerialNumber = $SerialNumber
+            })
+        }
+        catch {
+            $LocatorProperty = $Memory.PSObject.Properties['DeviceLocator']
+            $BankProperty = $Memory.PSObject.Properties['BankLabel']
+            $LocatorValue = if ($null -ne $LocatorProperty) { [string]$LocatorProperty.Value } else { '' }
+            $BankValue = if ($null -ne $BankProperty) { [string]$BankProperty.Value } else { '' }
+            $MemoryIdentifier = "$LocatorValue $BankValue".Trim()
+            if ([string]::IsNullOrWhiteSpace($MemoryIdentifier)) { $MemoryIdentifier = 'bez identyfikatora' }
+            Write-Warning "Pominięto nieprawidłowy rekord pamięci '$MemoryIdentifier': $($_.Exception.Message)"
+        }
+    }
+
+    $Parts = New-Object System.Collections.Generic.List[object]
+    $SolderedDevices = @($NormalizedDevices | Where-Object Placement -EQ 'soldered')
+    if ($SolderedDevices.Count -gt 0) {
+        foreach ($Group in @($SolderedDevices | Group-Object MemoryType, SpeedMhz)) {
+            $CapacityGb = [double](($Group.Group | Measure-Object -Property CapacityGb -Sum).Sum)
+            $First = $Group.Group | Select-Object -First 1
+            $Description = "$($CapacityGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))GB"
+            if ($First.SpeedMhz -gt 0) { $Description += " $($First.SpeedMhz)MHz" }
+            if (-not [string]::IsNullOrWhiteSpace($First.MemoryType)) { $Description += " $($First.MemoryType)" }
+            $Parts.Add((New-HardwarePart -Type 'RAM' -Description $Description -Connection 'soldered'))
+        }
+    }
+
+    foreach ($Memory in @($NormalizedDevices | Where-Object Placement -NE 'soldered')) {
+        $Description = "$($Memory.CapacityGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))GB"
+        if ($Memory.SpeedMhz -gt 0) { $Description += " $($Memory.SpeedMhz)MHz" }
+        if (-not [string]::IsNullOrWhiteSpace($Memory.MemoryType)) { $Description += " $($Memory.MemoryType)" }
+        $Parts.Add((New-HardwarePart -Type 'RAM' -Description $Description -Connection 'on board' -SerialNumber $Memory.SerialNumber))
+    }
+
+    $SystemArrays = @($MemoryArrays | Where-Object { [int]$_.Use -eq 3 -or [int]$_.Location -eq 3 })
+    if ($SystemArrays.Count -eq 0) { $SystemArrays = @($MemoryArrays) }
+    $MaximumCapacityKb = 0.0
+    $MemoryDeviceCount = 0
+    foreach ($Array in $SystemArrays) {
+        $CapacityKb = if ([double]$Array.MaxCapacityEx -gt 0) { [double]$Array.MaxCapacityEx } else { [double]$Array.MaxCapacity }
+        $MaximumCapacityKb += $CapacityKb
+        $MemoryDeviceCount += [int]$Array.MemoryDevices
+    }
+    $MaximumCapacityGb = if ($MaximumCapacityKb -gt 0) { [math]::Round($MaximumCapacityKb / 1MB, 2) } else { 0 }
+
+    $Types = @($NormalizedDevices.MemoryType | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    $Speeds = @($NormalizedDevices.SpeedMhz | Where-Object { $_ -gt 0 } | Select-Object -Unique)
+    $Placements = @($NormalizedDevices.Placement | Select-Object -Unique)
+    $DetectedSpec = ''
+    $SpecReliable = (
+        $NormalizedDevices.Count -gt 0 -and
+        $Types.Count -eq 1 -and
+        $Speeds.Count -eq 1 -and
+        $Placements.Count -eq 1 -and
+        $Placements[0] -ne 'unknown' -and
+        $MaximumCapacityGb -gt 0
+    )
+    if ($SpecReliable) {
+        $MaxText = $MaximumCapacityGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+        if ($Placements[0] -eq 'soldered') {
+            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz soldered, max${MaxText}GB"
+        }
+        elseif ($MemoryDeviceCount -gt 0) {
+            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz x$MemoryDeviceCount, max${MaxText}GB"
+        }
+        else {
+            $SpecReliable = $false
+        }
+    }
+
+    return [pscustomobject]@{
+        Parts         = $Parts.ToArray()
+        DetectedSpec  = $DetectedSpec
+        SpecReliable  = $SpecReliable
+    }
+}
+
+function Get-MemoryInventory {
+    try {
+        $MemoryDevices = @(Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction Stop)
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać pamięci RAM z Win32_PhysicalMemory: $($_.Exception.Message)"
+        $MemoryDevices = @()
+    }
+
+    try {
+        $MemoryArrays = @(Get-CimInstance -ClassName Win32_PhysicalMemoryArray -ErrorAction Stop)
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać możliwości pamięci z Win32_PhysicalMemoryArray: $($_.Exception.Message)"
+        $MemoryArrays = @()
+    }
+
+    return ConvertTo-MemoryInventory -MemoryDevices $MemoryDevices -MemoryArrays $MemoryArrays
+}
+
+function Get-NormalizedMemorySpec {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    return ([regex]::Replace($Value.Trim(), '\s+', ' ')).ToUpperInvariant()
+}
+
+function Set-ModelMemorySpec {
+    param(
+        [Parameter(Mandatory)][string]$DatabasePath,
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$MemorySpec
+    )
+
+    $Models = @(Import-ModelDatabase -Path $DatabasePath)
+    $Matches = @($Models | Where-Object { ([string]$_.model).Trim() -ieq $Model.Trim() })
+    if ($Matches.Count -ne 1) {
+        throw "Nie można zaktualizować memorySpec: model '$Model' nie występuje w bazie dokładnie jeden raz."
+    }
+    $Matches[0].memorySpec = $MemorySpec.Trim()
+
+    $Json = ConvertTo-Json -InputObject $Models -Depth 6
+    $TemporaryPath = Join-Path `
+        (Split-Path -Parent $DatabasePath) `
+        ".$([IO.Path]::GetFileName($DatabasePath)).$([guid]::NewGuid().ToString('N')).tmp"
+    $BackupPath = "$TemporaryPath.bak"
+    try {
+        Write-Utf8NoBomFile -Path $TemporaryPath -Content ($Json + [Environment]::NewLine)
+        $null = Import-ModelDatabase -Path $TemporaryPath
+        [IO.File]::Replace($TemporaryPath, $DatabasePath, $BackupPath)
+    }
+    finally {
+        foreach ($CleanupPath in @($TemporaryPath, $BackupPath)) {
+            if (Test-Path -LiteralPath $CleanupPath) {
+                Remove-Item -LiteralPath $CleanupPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    Write-Host "Zaktualizowano memorySpec dla modelu '$Model' w hardware-models.json." -ForegroundColor Green
+}
+
+function Resolve-MemorySpec {
+    param(
+        [Parameter(Mandatory)][psobject]$ModelEntry,
+        [Parameter(Mandatory)][psobject]$MemoryInventory,
+        [Parameter(Mandatory)][string]$DatabasePath
+    )
+
+    $DatabaseSpec = ([string]$ModelEntry.memorySpec).Trim()
+    $DetectedSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
+    $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedSpec)
+
+    if ($DetectedReliable -and
+        (Get-NormalizedMemorySpec -Value $DetectedSpec) -eq (Get-NormalizedMemorySpec -Value $DatabaseSpec)) {
+        return $DetectedSpec
+    }
+
+    Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
+    if ($DetectedReliable) {
+        Write-Host "Wykryta konfiguracja: $DetectedSpec" -ForegroundColor Green
+        Write-Host "Wartość w JSON:       $DatabaseSpec"
+        Write-Host '[1] Użyj wykrytej wartości i zapisz ją w JSON'
+        Write-Host '[2] Użyj wykrytej wartości tylko dla tego komputera'
+        Write-Host '[3] Użyj wartości zapisanej w JSON'
+        Write-Host '[4] Wpisz własną wartość'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-4]' -Minimum 1 -Maximum 4
+        switch ($Choice) {
+            1 {
+                Set-ModelMemorySpec -DatabasePath $DatabasePath -Model ([string]$ModelEntry.model) -MemorySpec $DetectedSpec
+                $ModelEntry.memorySpec = $DetectedSpec
+                return $DetectedSpec
+            }
+            2 { return $DetectedSpec }
+            3 { return $DatabaseSpec }
+            4 {
+                $CustomSpec = Read-TextValue -Prompt 'Wpisz konfigurację pamięci dla pola mainb' -Default $DetectedSpec
+            }
+        }
+    }
+    else {
+        Write-Warning 'Nie udało się jednoznacznie ustalić konfiguracji pamięci dla pola mainb.'
+        $PromptDefault = if ([string]::IsNullOrWhiteSpace($DatabaseSpec)) { $null } else { $DatabaseSpec }
+        $CustomSpec = Read-TextValue `
+            -Prompt 'Wpisz konfigurację pamięci lub zatwierdź wartość z JSON' `
+            -Default $PromptDefault
+    }
+
+    if ((Get-NormalizedMemorySpec -Value $CustomSpec) -ne (Get-NormalizedMemorySpec -Value $DatabaseSpec)) {
+        Write-Host '[1] Zapisz tę wartość w JSON'
+        Write-Host '[2] Użyj jej tylko dla tego komputera'
+        $SaveChoice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+        if ($SaveChoice -eq 1) {
+            Set-ModelMemorySpec -DatabasePath $DatabasePath -Model ([string]$ModelEntry.model) -MemorySpec $CustomSpec
+            $ModelEntry.memorySpec = $CustomSpec
+        }
+    }
+    return $CustomSpec
+}
+
 function Get-HardwareParts {
-    param([Parameter(Mandatory)][string]$ComputerModel)
+    param(
+        [Parameter(Mandatory)][string]$ComputerModel,
+        [AllowNull()][psobject]$MemoryInventory
+    )
 
     $Parts = New-Object System.Collections.Generic.List[object]
 
@@ -533,22 +786,13 @@ function Get-HardwareParts {
         Write-Warning "Nie udało się odczytać ekranów: $($_.Exception.Message)"
     }
 
-    # PAMIĘĆ RAM: każdy fizyczny moduł jest osobną pozycją. Windows nie zawsze
-    # potrafi rozróżnić pamięć lutowaną od modułu w slocie, więc używamy lokalizatora.
-    try {
-        foreach ($Memory in @(Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction Stop)) {
-            $CapacityGb = [math]::Round([double]$Memory.Capacity / 1GB)
-            $Speed = if ($Memory.ConfiguredClockSpeed) { $Memory.ConfiguredClockSpeed } else { $Memory.Speed }
-            $MemoryType = Get-MemoryTypeName -SmbiosMemoryType ([int]$Memory.SMBIOSMemoryType)
-            $Description = "$($CapacityGb)GB $($Speed)Mhz"
-            if (-not [string]::IsNullOrWhiteSpace($MemoryType)) { $Description += " $MemoryType" }
-            $Locator = "$($Memory.DeviceLocator) $($Memory.BankLabel)"
-            $Connection = if ($Locator -match 'onboard|on board|solder') { 'soldered' } else { 'slot' }
-            $Parts.Add((New-HardwarePart -Type 'RAM' -Description $Description -Connection $Connection))
-        }
+    # PAMIĘĆ RAM: pamięć lutowana jest grupowana, a wymienne moduły pozostają
+    # osobnymi wpisami. Dla pamięci niewlutowanej importer oczekuje `on board`.
+    if ($null -eq $MemoryInventory) {
+        $MemoryInventory = Get-MemoryInventory
     }
-    catch {
-        Write-Warning "Nie udało się odczytać pamięci RAM: $($_.Exception.Message)"
+    foreach ($MemoryPart in @($MemoryInventory.Parts)) {
+        $Parts.Add($MemoryPart)
     }
 
     # DYSKI: pojemność jest liczona dziesiętnie, aby odpowiadała oznaczeniom
@@ -1065,8 +1309,14 @@ function Invoke-HardwareInventory {
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
     Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
     $ModelEntry = Wait-ForKnownModel -Model $System.Model -DatabasePath $ModelDatabasePath
+    $MemoryInventory = Get-MemoryInventory
+    $MemorySpec = Resolve-MemorySpec `
+        -ModelEntry $ModelEntry `
+        -MemoryInventory $MemoryInventory `
+        -DatabasePath $ModelDatabasePath
     $Mainboard = Resolve-MainboardDescription `
         -ModelEntry $ModelEntry `
+        -MemorySpec $MemorySpec `
         -Manufacturer $System.BaseBoardManufacturer `
         -Product $System.BaseBoardProduct `
         -Version $System.BaseBoardVersion
@@ -1088,7 +1338,7 @@ function Invoke-HardwareInventory {
     $Bought = Get-CollectionBoughtDate -Collection $Collection
 
     while ($true) {
-        $DetectedParts = Get-HardwareParts -ComputerModel $System.Model
+        $DetectedParts = Get-HardwareParts -ComputerModel $System.Model -MemoryInventory $MemoryInventory
         $Review = Review-HardwareParts `
             -InitialParts $DetectedParts `
             -ServiceTag $ServiceTag `
@@ -1105,6 +1355,17 @@ function Invoke-HardwareInventory {
             throw [OperationCanceledException]::new('Anulowano przegląd podzespołów.')
         }
         Write-Host 'Ponawiam odczyt sprzętu...' -ForegroundColor Yellow
+        $MemoryInventory = Get-MemoryInventory
+        $MemorySpec = Resolve-MemorySpec `
+            -ModelEntry $ModelEntry `
+            -MemoryInventory $MemoryInventory `
+            -DatabasePath $ModelDatabasePath
+        $Mainboard = Resolve-MainboardDescription `
+            -ModelEntry $ModelEntry `
+            -MemorySpec $MemorySpec `
+            -Manufacturer $System.BaseBoardManufacturer `
+            -Product $System.BaseBoardProduct `
+            -Version $System.BaseBoardVersion
     }
 
     $Manual = Read-ManualData -Current $null
@@ -1151,7 +1412,18 @@ function Invoke-HardwareInventory {
                 -Mainboard $Mainboard
             if ($Review.Action -eq 'Accept') { $Parts = @($Review.Parts); continue }
             if ($Review.Action -eq 'Refresh') {
-                $DetectedParts = Get-HardwareParts -ComputerModel $System.Model
+                $MemoryInventory = Get-MemoryInventory
+                $MemorySpec = Resolve-MemorySpec `
+                    -ModelEntry $ModelEntry `
+                    -MemoryInventory $MemoryInventory `
+                    -DatabasePath $ModelDatabasePath
+                $Mainboard = Resolve-MainboardDescription `
+                    -ModelEntry $ModelEntry `
+                    -MemorySpec $MemorySpec `
+                    -Manufacturer $System.BaseBoardManufacturer `
+                    -Product $System.BaseBoardProduct `
+                    -Version $System.BaseBoardVersion
+                $DetectedParts = Get-HardwareParts -ComputerModel $System.Model -MemoryInventory $MemoryInventory
                 $Review = Review-HardwareParts `
                     -InitialParts $DetectedParts `
                     -ServiceTag $ServiceTag `

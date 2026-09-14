@@ -21,7 +21,8 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 
 - Baza znanych modeli jest utrzymywana ręcznie.
 - Dane modeli będą oddzielone od logiki skryptu i zapisane w pliku `hardware-models.json`.
-- Skrypt wczytuje oraz waliduje bazę, ale nie modyfikuje jej automatycznie.
+- Skrypt wczytuje oraz waliduje bazę i nigdy nie zmienia jej bez decyzji użytkownika.
+- Wyjątkiem jest interaktywnie zatwierdzona aktualizacja pola `memorySpec`: przy różnicy między SMBIOS i JSON-em użytkownik może zapisać wykrytą albo własną wartość w bazie.
 - Jeśli wykrytego modelu nie ma w bazie, skrypt zatrzymuje dalsze przetwarzanie i prosi o ręczne dopisanie modelu do `hardware-models.json`.
 - Po potwierdzeniu przez użytkownika skrypt ponownie wczytuje bazę i kontynuuje dopiero wtedy, gdy model został poprawnie dodany.
 
