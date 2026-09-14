@@ -41,13 +41,13 @@ $ClockFromWmiFallback = Get-ProcessorClockSpeedMhz -Processors @(
 )
 Assert-True -Condition ($ClockFromWmiFallback -eq 2100) -Message 'MaxClockSpeed should be used when the processor name has no frequency.'
 
-Initialize-StorageTopologyApi
+Initialize-NvmeHealthApi
 $MockHealthLog = New-Object byte[] 512
 $MockHealthLog[5] = 3
 [BitConverter]::GetBytes([uint64]2000000).CopyTo($MockHealthLog, 32)
 [BitConverter]::GetBytes([uint64]1000000).CopyTo($MockHealthLog, 48)
 [BitConverter]::GetBytes([uint64]2400).CopyTo($MockHealthLog, 128)
-$ParsedHealthLog = [GetHardware.StorageTopology]::ParseHealthLog($MockHealthLog)
+$ParsedHealthLog = [GetHardware.NvmeHealthReaderV1]::ParseHealthLog($MockHealthLog)
 Assert-True -Condition ($ParsedHealthLog.PercentageUsed -eq 3) -Message 'The NVMe health parser should read PercentageUsed.'
 Assert-True -Condition ($ParsedHealthLog.DataUnitsRead -eq 2000000) -Message 'The NVMe health parser should read DataUnitsRead.'
 Assert-True -Condition ($ParsedHealthLog.DataUnitsWritten -eq 1000000) -Message 'The NVMe health parser should read DataUnitsWritten.'
@@ -100,6 +100,18 @@ function Get-NativeNvmeHealth {
 function Get-DiskReliabilityData {
     param([psobject]$Disk)
     return $null
+}
+function Get-NetAdapter {
+    param([string]$Name, [switch]$IncludeHidden, $ErrorAction)
+    return @(
+        [pscustomobject]@{ Name = 'Ethernet'; InterfaceDescription = 'Intel(R) Ethernet Connection (14) I219-LM'; PermanentAddress = 'A0291926DE3D'; MacAddress = 'A0-29-19-26-DE-3D'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = '802.3'; PnPDeviceID = 'PCI\VEN_8086&DEV_15F9' }
+        [pscustomobject]@{ Name = 'Wi-Fi'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz'; PermanentAddress = 'AC74B13CDD18'; MacAddress = 'AC-74-B1-3C-DD-18'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = 'PCI\VEN_8086&DEV_43F0' }
+        [pscustomobject]@{ Name = 'Bluetooth Network Connection'; InterfaceDescription = 'Bluetooth Device (Personal Area Network)'; PermanentAddress = 'AC74B13CDD1C'; MacAddress = 'AC-74-B1-3C-DD-1C'; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'BlueTooth'; PnPDeviceID = 'BTH\MS_BTHPAN' }
+        [pscustomobject]@{ Name = 'Ethernet 3'; InterfaceDescription = 'Realtek USB GbE Family Controller'; PermanentAddress = 'C03EBA333E88'; MacAddress = 'C0-3E-BA-33-3E-88'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = '802.3'; PnPDeviceID = 'USB\VID_0BDA&PID_8153' }
+        [pscustomobject]@{ Name = 'Ethernet 2'; InterfaceDescription = 'Cisco AnyConnect Virtual Miniport Adapter for Windows x64'; PermanentAddress = '00059A3C7A00'; MacAddress = '00-05-9A-3C-7A-00'; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'Unspecified'; PnPDeviceID = 'ROOT\NET\0000' }
+        [pscustomobject]@{ Name = 'Local Area Connection* 1'; InterfaceDescription = 'Microsoft Wi-Fi Direct Virtual Adapter'; PermanentAddress = 'AC74B13CDD19'; MacAddress = 'AC-74-B1-3C-DD-19'; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = '{5d624f94-8850-40c3-a3fa-a4fd2080baf3}\vwifimp_wfd' }
+        [pscustomobject]@{ Name = 'Local Area Connection* 7'; InterfaceDescription = 'WAN Miniport (IP)'; PermanentAddress = ''; MacAddress = ''; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'Unspecified'; PnPDeviceID = 'SWD\MSRRAS\MS_NDISWANIP' }
+    )
 }
 function Get-CimInstance {
     param(
@@ -317,6 +329,15 @@ Assert-True -Condition ((Format-DiskPowerOnTime -Hours 2400) -match '^2400 h \(1
 Assert-True -Condition ((Format-DiskDataAmount -Bytes 1024000000000) -match '^1[,.]02 TB$') -Message 'Disk byte counters should be shown in decimal TB.'
 Assert-True -Condition ((Format-DiskWearLevel -WearPercent 3) -eq '3%') -Message 'Disk wear should be shown as a percentage.'
 
+$NetworkParts = @(Get-NetworkInventoryParts)
+Assert-True -Condition ($NetworkParts.Count -eq 3) -Message 'Only built-in Ethernet, Wi-Fi, and Bluetooth PAN should remain.'
+Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Realtek USB GbE Family Controller').Count -eq 0) -Message 'A USB network adapter should not be written to PHP.'
+Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Cisco AnyConnect Virtual Miniport Adapter for Windows x64').Count -eq 0) -Message 'A VPN adapter should be excluded.'
+Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Intel(R) Wi-Fi 6 AX201 160MHz').Sn -eq 'AC74B13CDD18') -Message 'PermanentAddress should be preferred and normalized.'
+Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Bluetooth Device (Personal Area Network)').Conn -eq 'on board') -Message 'Bluetooth PAN should be retained despite Windows marking it virtual.'
+Assert-True -Condition ((Get-NormalizedMacAddress -Value 'FF-FF-FF-FF-FF-FF') -eq '') -Message 'A broadcast MAC address should be rejected.'
+Assert-True -Condition (Test-LocallyAdministeredMacAddress -Value '02-11-22-33-44-55') -Message 'A locally administered MAC address should be recognized.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
     -MemorySpec ([string]$TestModelEntry.memorySpec) `
@@ -365,11 +386,12 @@ Assert-True -Condition ($CustomMainboard -eq "Custom baseboard A01 ($($TestModel
 $script:MockReadHostValue = ''
 $script:MockReadHostQueue.Enqueue('on board,HDMI,USB-C')
 $DetectedMockParts = @(Get-HardwareParts -ComputerModel 'Latitude 7420')
-Assert-True -Condition ($DetectedMockParts.Count -eq 7) -Message 'The mocked hardware scan should return all seven component categories.'
+Assert-True -Condition ($DetectedMockParts.Count -eq 9) -Message 'The mocked hardware scan should return all component categories and three built-in network adapters.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Matrix').Desc -eq '14" 1920x1080') -Message 'The mocked scan should include the EDID-based matrix description.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'RAM').Count -eq 1) -Message 'The mocked scan should include RAM.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Count -eq 1) -Message 'The mocked scan should include a disk.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The mocked scan should use Get-PhysicalDisk data.'
+Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Network Card').Count -eq 3) -Message 'The mocked scan should include only the approved built-in network adapters.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Count -eq 1) -Message 'Software and remote display adapters should be excluded.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Conn -eq 'on board,HDMI,USB-C') -Message 'The user-entered graphics outputs should be preserved.'
 

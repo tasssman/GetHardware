@@ -946,6 +946,145 @@ namespace GetHardware
 '@ -ErrorAction Stop
 }
 
+function Initialize-NvmeHealthApi {
+    # Add-Type nie pozwala zastąpić już załadowanej klasy w tej samej sesji
+    # PowerShell. Odczyt NVMe ma własną wersjonowaną klasę, niezależną od klasy
+    # formatu dysku, dzięki czemu aktualizacja skryptu nie wymaga nowej konsoli.
+    if ('GetHardware.NvmeHealthReaderV1' -as [type]) { return }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace GetHardware
+{
+    public sealed class NvmeHealthSnapshotV1
+    {
+        public bool Available { get; set; }
+        public string Source { get; set; }
+        public string Detail { get; set; }
+        public ulong? PowerOnHours { get; set; }
+        public ulong? DataUnitsRead { get; set; }
+        public ulong? DataUnitsWritten { get; set; }
+        public int? PercentageUsed { get; set; }
+    }
+
+    public static class NvmeHealthReaderV1
+    {
+        private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
+        private const uint FILE_SHARE_READ = 0x00000001;
+        private const uint FILE_SHARE_WRITE = 0x00000002;
+        private const uint OPEN_EXISTING = 3;
+        private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateFile(string fileName, uint desiredAccess, uint shareMode,
+            IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool DeviceIoControl(IntPtr device, uint controlCode, byte[] input,
+            uint inputSize, byte[] output, uint outputSize, out uint bytesReturned, IntPtr overlapped);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        public static NvmeHealthSnapshotV1 Query(int diskNumber)
+        {
+            string path = @"\\.\PhysicalDrive" + diskNumber;
+            IntPtr handle = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero,
+                OPEN_EXISTING, 0, IntPtr.Zero);
+            if (handle == InvalidHandleValue)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Nie można otworzyć " + path);
+
+            try
+            {
+                const int protocolOffset = 8;
+                const int protocolSize = 40;
+                const int healthLogSize = 512;
+                const int bufferSize = protocolOffset + protocolSize + healthLogSize;
+                int[] propertyIds = new int[] { 50, 49 };
+                string[] propertyNames = new string[] {
+                    "StorageDeviceProtocolSpecificProperty",
+                    "StorageAdapterProtocolSpecificProperty"
+                };
+                int lastError = 0;
+
+                for (int propertyIndex = 0; propertyIndex < propertyIds.Length; propertyIndex++)
+                {
+                    byte[] query = new byte[bufferSize];
+                    Buffer.BlockCopy(BitConverter.GetBytes(propertyIds[propertyIndex]), 0, query, 0, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(3), 0, query, protocolOffset, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(2), 0, query, protocolOffset + 4, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(2), 0, query, protocolOffset + 8, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(protocolSize), 0, query, protocolOffset + 16, 4);
+                    Buffer.BlockCopy(BitConverter.GetBytes(healthLogSize), 0, query, protocolOffset + 20, 4);
+
+                    byte[] output = new byte[bufferSize];
+                    uint bytesReturned;
+                    bool success = DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY, query,
+                        (uint)query.Length, output, (uint)output.Length, out bytesReturned, IntPtr.Zero);
+                    if (!success)
+                    {
+                        lastError = Marshal.GetLastWin32Error();
+                        continue;
+                    }
+                    if (bytesReturned < protocolOffset + protocolSize) continue;
+
+                    uint dataOffset = BitConverter.ToUInt32(output, protocolOffset + 16);
+                    uint dataLength = BitConverter.ToUInt32(output, protocolOffset + 20);
+                    long healthOffset = protocolOffset + dataOffset;
+                    if (dataOffset < protocolSize || dataLength < healthLogSize ||
+                        healthOffset + healthLogSize > bytesReturned) continue;
+
+                    NvmeHealthSnapshotV1 result = Parse(output, (int)healthOffset);
+                    result.Source = propertyNames[propertyIndex];
+                    return result;
+                }
+
+                return new NvmeHealthSnapshotV1 {
+                    Available = false,
+                    Source = "IOCTL_STORAGE_QUERY_PROPERTY",
+                    Detail = lastError == 0 ? "Sterownik nie zwrócił dziennika NVMe SMART/Health."
+                        : new Win32Exception(lastError).Message
+                };
+            }
+            finally { CloseHandle(handle); }
+        }
+
+        public static NvmeHealthSnapshotV1 ParseHealthLog(byte[] healthLog)
+        {
+            if (healthLog == null) throw new ArgumentNullException("healthLog");
+            return Parse(healthLog, 0);
+        }
+
+        private static NvmeHealthSnapshotV1 Parse(byte[] buffer, int offset)
+        {
+            if (buffer == null || offset < 0 || offset + 512 > buffer.Length)
+                throw new ArgumentException("Dziennik NVMe SMART/Health musi mieć co najmniej 512 bajtów.");
+
+            return new NvmeHealthSnapshotV1 {
+                Available = true,
+                Source = "NVMe SMART/Health",
+                Detail = "",
+                PercentageUsed = (int)buffer[offset + 5],
+                DataUnitsRead = ReadCounter(buffer, offset + 32),
+                DataUnitsWritten = ReadCounter(buffer, offset + 48),
+                PowerOnHours = ReadCounter(buffer, offset + 128)
+            };
+        }
+
+        private static ulong? ReadCounter(byte[] buffer, int offset)
+        {
+            for (int index = 8; index < 16; index++)
+                if (buffer[offset + index] != 0) return null;
+            return BitConverter.ToUInt64(buffer, offset);
+        }
+    }
+}
+'@ -ErrorAction Stop
+}
+
 function Get-NativeDiskFormFactor {
     param([Parameter(Mandatory)][int]$DiskNumber)
 
@@ -956,8 +1095,8 @@ function Get-NativeDiskFormFactor {
 function Get-NativeNvmeHealth {
     param([Parameter(Mandatory)][int]$DiskNumber)
 
-    Initialize-StorageTopologyApi
-    return [GetHardware.StorageTopology]::QueryNvmeHealth($DiskNumber)
+    Initialize-NvmeHealthApi
+    return [GetHardware.NvmeHealthReaderV1]::Query($DiskNumber)
 }
 
 function Get-DiskReliabilityData {
@@ -1230,6 +1369,142 @@ function Test-PhysicalGraphicsAdapter {
     $PnpDeviceId = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'PNPDeviceID')
     if ($PnpDeviceId -match '^(?i)ROOT\\(?:RDP|BASICDISPLAY|INDIRECTDISPLAY)') { return $false }
     return $true
+}
+
+function Get-NormalizedMacAddress {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $Mac = ($Value -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+    if ($Mac.Length -ne 12) { return '' }
+    if ($Mac -match '^(?:0{12}|F{12})$') { return '' }
+
+    $FirstOctet = 0
+    if (-not [int]::TryParse($Mac.Substring(0, 2), [Globalization.NumberStyles]::HexNumber,
+        [Globalization.CultureInfo]::InvariantCulture, [ref]$FirstOctet)) { return '' }
+    if (($FirstOctet -band 1) -ne 0) { return '' }
+    return $Mac
+}
+
+function Test-LocallyAdministeredMacAddress {
+    param([AllowNull()][string]$Value)
+
+    $Mac = Get-NormalizedMacAddress -Value $Value
+    if ([string]::IsNullOrWhiteSpace($Mac)) { return $false }
+    $FirstOctet = [Convert]::ToInt32($Mac.Substring(0, 2), 16)
+    return ($FirstOctet -band 2) -ne 0
+}
+
+function Get-NetworkAdapterDecision {
+    param([Parameter(Mandatory)][psobject]$Adapter)
+
+    $Description = (@(
+        [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'InterfaceDescription')
+        [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Description')
+        [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Name')
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1).Trim()
+    $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PnPDeviceID')).Trim()
+    if ([string]::IsNullOrWhiteSpace($PnpDeviceId)) {
+        $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PNPDeviceID')).Trim()
+    }
+    $PhysicalMediaType = [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PhysicalMediaType')
+    $HardwareInterface = Get-OptionalPropertyValue -InputObject $Adapter -Name 'HardwareInterface'
+    if ($null -eq $HardwareInterface) {
+        $HardwareInterface = Get-OptionalPropertyValue -InputObject $Adapter -Name 'PhysicalAdapter'
+    }
+    $Virtual = Get-OptionalPropertyValue -InputObject $Adapter -Name 'Virtual'
+
+    if ($PnpDeviceId -match '^(?i)USB\\') {
+        return [pscustomobject]@{ Include = $false; Description = $Description; Connection = ''; Reason = 'zewnętrzny adapter USB' }
+    }
+
+    # Bluetooth PAN jest przez Windows oznaczany jako adapter wirtualny, mimo że
+    # reprezentuje fizyczny, zwykle wbudowany moduł Bluetooth.
+    if ($PnpDeviceId -match '^(?i)BTH\\' -or $PhysicalMediaType -match '^(?i)Bluetooth$') {
+        return [pscustomobject]@{ Include = $true; Description = $Description; Connection = 'on board'; Reason = 'Bluetooth PAN' }
+    }
+
+    $VirtualPattern = '(?i)WAN Miniport|Wi-Fi Direct Virtual|Virtual (?:Ethernet|Switch|Miniport)|VPN|AnyConnect|Hyper-V|Teredo|6to4|IP-HTTPS|Kernel Debug|Loopback'
+    if ($Virtual -eq $true -or $Description -match $VirtualPattern -or
+        $PnpDeviceId -match '^(?i)(?:ROOT|SWD)\\') {
+        return [pscustomobject]@{ Include = $false; Description = $Description; Connection = ''; Reason = 'adapter wirtualny lub systemowy' }
+    }
+
+    if ($HardwareInterface -ne $true) {
+        return [pscustomobject]@{ Include = $false; Description = $Description; Connection = ''; Reason = 'brak potwierdzenia fizycznego interfejsu' }
+    }
+
+    return [pscustomobject]@{ Include = $true; Description = $Description; Connection = 'on board'; Reason = 'fizyczny adapter sieciowy' }
+}
+
+function ConvertTo-NetworkAdapterPart {
+    param([Parameter(Mandatory)][psobject]$Adapter)
+
+    $Decision = Get-NetworkAdapterDecision -Adapter $Adapter
+    if (-not $Decision.Include) {
+        $DisplayName = if ([string]::IsNullOrWhiteSpace([string]$Decision.Description)) { '(bez nazwy)' } else { $Decision.Description }
+        Write-Host "Pominięto adapter sieciowy '$DisplayName': $($Decision.Reason)." -ForegroundColor DarkGray
+        return $null
+    }
+
+    $PermanentAddress = Get-NormalizedMacAddress -Value ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PermanentAddress'))
+    $CurrentAddress = Get-NormalizedMacAddress -Value ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'MacAddress'))
+    if ([string]::IsNullOrWhiteSpace($CurrentAddress)) {
+        $CurrentAddress = Get-NormalizedMacAddress -Value ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'MACAddress'))
+    }
+    $Mac = if (-not [string]::IsNullOrWhiteSpace($PermanentAddress)) { $PermanentAddress } else { $CurrentAddress }
+
+    if ([string]::IsNullOrWhiteSpace($Mac)) {
+        Write-Warning "Adapter '$($Decision.Description)' nie udostępnia poprawnego adresu MAC. Zostanie zapisany bez pola sn."
+    }
+    elseif (Test-LocallyAdministeredMacAddress -Value $Mac) {
+        Write-Warning "Adapter '$($Decision.Description)' zgłasza lokalnie administrowany adres MAC: $Mac. Zweryfikuj go przed zatwierdzeniem."
+    }
+
+    return New-HardwarePart `
+        -Type 'Network Card' `
+        -Description ([string]$Decision.Description) `
+        -Connection ([string]$Decision.Connection) `
+        -SerialNumber $Mac
+}
+
+function Get-NetworkInventoryParts {
+    $Parts = New-Object System.Collections.Generic.List[object]
+    $Adapters = @()
+    $UseFallback = $false
+
+    if (Get-Command -Name Get-NetAdapter -ErrorAction SilentlyContinue) {
+        try { $Adapters = @(Get-NetAdapter -Name * -IncludeHidden -ErrorAction Stop) }
+        catch {
+            Write-Warning "Nie udało się użyć Get-NetAdapter: $($_.Exception.Message)"
+            $UseFallback = $true
+        }
+    }
+    else { $UseFallback = $true }
+
+    if ($UseFallback) {
+        try { $Adapters = @(Get-CimInstance -ClassName Win32_NetworkAdapter -ErrorAction Stop) }
+        catch {
+            Write-Warning "Nie udało się odczytać kart sieciowych z Win32_NetworkAdapter: $($_.Exception.Message)"
+            return $Parts.ToArray()
+        }
+    }
+
+    foreach ($Adapter in $Adapters) {
+        try {
+            $Part = ConvertTo-NetworkAdapterPart -Adapter $Adapter
+            if ($null -ne $Part) { $Parts.Add($Part) }
+        }
+        catch {
+            $Identity = [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'InterfaceDescription')
+            if ([string]::IsNullOrWhiteSpace($Identity)) {
+                $Identity = [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Description')
+            }
+            Write-Warning "Pominięto adapter sieciowy '$Identity': $($_.Exception.Message)"
+        }
+    }
+
+    return $Parts.ToArray()
 }
 
 function Get-GraphicsDescription {
@@ -1582,20 +1857,12 @@ function Get-HardwareParts {
         $Parts.Add($DiskPart)
     }
 
-    # SIEĆ: zachowujemy wszystkie fizyczne adaptery z adresem MAC, w tym
-    # Bluetooth PAN i adaptery USB, zgodnie z formatem istniejącej bazy.
-    try {
-        $Adapters = @(
-            Get-CimInstance -ClassName Win32_NetworkAdapter -ErrorAction Stop |
-                Where-Object { $_.PhysicalAdapter -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$_.MACAddress) }
-        )
-        foreach ($Adapter in $Adapters) {
-            $Mac = ([string]$Adapter.MACAddress -replace '[:-]', '').ToUpperInvariant()
-            $Parts.Add((New-HardwarePart -Type 'Network Card' -Description ([string]$Adapter.Description) -Connection 'on board' -SerialNumber $Mac))
-        }
-    }
-    catch {
-        Write-Warning "Nie udało się odczytać kart sieciowych: $($_.Exception.Message)"
+    # SIEĆ: Get-NetAdapter pozwala rozróżnić sprzętowe i wirtualne interfejsy
+    # oraz preferować trwały PermanentAddress. Zachowujemy wbudowane adaptery
+    # Ethernet/Wi-Fi i Bluetooth PAN. Zewnętrzne adaptery USB oraz interfejsy
+    # systemowe, VPN i wirtualne są pomijane z czytelną informacją.
+    foreach ($NetworkPart in @(Get-NetworkInventoryParts)) {
+        $Parts.Add($NetworkPart)
     }
 
     # DŹWIĘK: WMI może zwrócić więcej niż jedno urządzenie audio; każde jest

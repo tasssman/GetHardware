@@ -131,7 +131,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Format odczytywać przez `IOCTL_STORAGE_QUERY_PROPERTY`; gdy sterownik zwraca `Unknown`, poprosić użytkownika o zatwierdzenie podpowiedzi wynikającej z `BusType`.
   - Dla NVMe z nieznanym formatem proponować `M.2`, ale nie zapisywać go bez zatwierdzenia.
 
-- [ ] Rozszerzyć dane dysku dostępne podczas weryfikacji.
+- [x] Rozszerzyć dane dysku dostępne podczas weryfikacji.
   - Odczytywać `Manufacturer`, `Model`, `SerialNumber`, `FirmwareVersion`, `BusType`, `MediaType` i `PhysicalLocation`.
   - Pokazywać `HealthStatus` oraz `OperationalStatus` diagnostycznie.
   - Jeśli sterownik pozwala, odczytywać temperaturę, zużycie, czas pracy oraz liczniki błędów przez `Get-StorageReliabilityCounter`.
@@ -160,36 +160,36 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Karty sieciowe
 
-- [ ] Zastąpić przestarzałe `Win32_NetworkAdapter` nowszym źródłem danych.
+- [x] Zastąpić przestarzałe `Win32_NetworkAdapter` nowszym źródłem danych.
   - Używać `Get-NetAdapter -Name * -IncludeHidden` albo `MSFT_NetAdapter` jako źródła podstawowego.
   - Pozostawić `Win32_NetworkAdapter` jako rozwiązanie awaryjne.
   - Korelować dane z obu źródeł po `InterfaceIndex`, `PnPDeviceID`, GUID albo innym stabilnym identyfikatorze.
 
-- [ ] Dokładniej klasyfikować adaptery sieciowe.
+- [x] Dokładniej klasyfikować adaptery sieciowe.
   - Rozróżniać Ethernet, Wi-Fi, Bluetooth PAN, USB Ethernet i urządzenia wbudowane.
   - Odfiltrować VPN, Hyper-V, loopback, WAN Miniport i pozostałe adaptery wirtualne.
   - Nie polegać wyłącznie na `PhysicalAdapter = true`.
   - Wykorzystać `PhysicalMediaType`, `HardwareInterface`, `Virtual`, `ConnectorPresent`, opis oraz `PnPDeviceID`.
 
-- [ ] Ustalić sposób zapisywania rodzaju połączenia.
+- [x] Ustalić sposób zapisywania rodzaju połączenia.
   - Rozpoznawać urządzenia wbudowane na podstawie magistrali PCI i zapisywać je jako `on board`.
-  - Rozpoznawać adaptery USB na podstawie `PnPDeviceID`.
-  - Zdecydować, czy `Realtek USB GbE` ma otrzymywać `conn'=>'USB'`, czy zgodnie ze starym formatem nadal `conn'=>'on board'`.
+  - Rozpoznawać adaptery USB na podstawie `PnPDeviceID` i nie dodawać ich do PHP.
+  - Adapter taki jak `Realtek USB GbE` jest urządzeniem zewnętrznym i ma zostać pominięty zamiast otrzymywać `conn'=>'USB'` albo `conn'=>'on board'`.
 
-- [ ] Preferować trwały adres MAC.
+- [x] Preferować trwały adres MAC.
   - Używać poprawnego `PermanentAddress`, jeśli sterownik go udostępnia.
   - Używać `MacAddress` jako wartości awaryjnej.
   - Normalizować adres do wielkich liter bez separatorów.
   - Wykrywać adres lokalnie administrowany i ostrzegać, że może być zmieniony lub losowy.
   - Odrzucać adresy puste, zerowe, broadcast i inne niewiarygodne wartości.
 
-- [ ] Ustalić zachowanie przy braku pewnego adresu MAC.
-  - Zdecydować, czy brak trwałego MAC ma tylko powodować ostrzeżenie i pominięcie `sn`, czy blokować zapis adaptera.
+- [x] Ustalić zachowanie przy braku pewnego adresu MAC.
+  - Brak trwałego i bieżącego poprawnego MAC powoduje ostrzeżenie oraz pominięcie `sn`, ale nie usuwa fizycznego adaptera.
   - Nie zapisywać bez ostrzeżenia losowego adresu Wi-Fi jako sprzętowego numeru seryjnego.
 
-- [ ] Ustalić zakres wykrywanych adapterów.
-  - Zdecydować, czy zapisywać adaptery wyłączone, ale fizycznie zainstalowane.
-  - Zachować Wi-Fi, Bluetooth PAN i fizyczne adaptery USB, jeśli nadal odpowiada to formatowi istniejącej bazy.
+- [x] Ustalić zakres wykrywanych adapterów.
+  - Zapisywać adaptery wyłączone lub odłączone, jeśli są fizycznie zainstalowane; bieżący `Status` nie decyduje o uwzględnieniu.
+  - Zachować wbudowane Wi-Fi i Bluetooth PAN; pomijać fizyczne adaptery USB.
   - Pokazywać użytkownikowi przyczynę pominięcia każdego adaptera.
 
 - [ ] Rozszerzyć dane dostępne podczas weryfikacji.
@@ -198,11 +198,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Dane dynamiczne, takie jak stan i szybkość bieżącego połączenia, wykorzystywać tylko diagnostycznie.
   - Zdecydować, czy informacje o sterowniku mają pozostać wyłącznie w konsoli.
 
-- [ ] Przetwarzać każdy adapter niezależnie.
+- [x] Przetwarzać każdy adapter niezależnie.
   - Błąd jednego adaptera nie powinien usuwać wszystkich kart sieciowych z wyniku.
   - W ostrzeżeniu wskazywać nazwę lub identyfikator problematycznego urządzenia.
 
-- [ ] Zachować przewidywalny format PHP.
+- [x] Zachować przewidywalny format PHP.
   - Pozostawić typ `Network Card`.
   - Zapisywać opis urządzenia w `desc`, sposób połączenia w `conn` oraz zatwierdzony MAC w opcjonalnym `sn`.
   - Unikać dodawania do `desc` dynamicznych danych, takich jak bieżąca szybkość połączenia.
@@ -391,7 +391,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 - [ ] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
   1. Laptop nie może mieć podłączonych dodatkowych monitorów — stacjonarnych ani zdalnych.
-  2. Obsłużyć dyski zewnętrzne i nośniki wymienne - napisać na początku skryptu że należy odłączyć.
+  2. Przed rozpoczęciem inwentaryzacji należy odłączyć urządzenia USB, w szczególności zewnętrzne karty sieciowe, dyski, pendrive'y i stacje dokujące.
 
 - [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.
