@@ -610,6 +610,311 @@ function Test-TouchScreenDetected {
     return $false
 }
 
+function Initialize-StorageTopologyApi {
+    if ('GetHardware.StorageTopology' -as [type]) { return }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace GetHardware
+{
+    public sealed class DiskFormFactorResult
+    {
+        public int Code { get; set; }
+        public string Name { get; set; }
+        public string Source { get; set; }
+        public string Detail { get; set; }
+    }
+
+    public static class StorageTopology
+    {
+        private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
+        private const uint FILE_SHARE_READ = 0x00000001;
+        private const uint FILE_SHARE_WRITE = 0x00000002;
+        private const uint OPEN_EXISTING = 3;
+        private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateFile(string fileName, uint desiredAccess, uint shareMode,
+            IntPtr securityAttributes, uint creationDisposition, uint flagsAndAttributes, IntPtr templateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool DeviceIoControl(IntPtr device, uint controlCode, byte[] input,
+            uint inputSize, byte[] output, uint outputSize, out uint bytesReturned, IntPtr overlapped);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        public static DiskFormFactorResult Query(int diskNumber)
+        {
+            string path = @"\\.\PhysicalDrive" + diskNumber;
+            IntPtr handle = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero,
+                OPEN_EXISTING, 0, IntPtr.Zero);
+            if (handle == InvalidHandleValue)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Nie można otworzyć " + path);
+
+            try
+            {
+                int[] propertyIds = new int[] { 54, 53 };
+                string[] propertyNames = new string[] {
+                    "StorageDevicePhysicalTopologyProperty", "StorageAdapterPhysicalTopologyProperty"
+                };
+                int lastError = 0;
+
+                for (int propertyIndex = 0; propertyIndex < propertyIds.Length; propertyIndex++)
+                {
+                    byte[] query = new byte[12];
+                    Buffer.BlockCopy(BitConverter.GetBytes(propertyIds[propertyIndex]), 0, query, 0, 4);
+                    byte[] output = new byte[65536];
+                    uint bytesReturned;
+                    bool success = DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY, query,
+                        (uint)query.Length, output, (uint)output.Length, out bytesReturned, IntPtr.Zero);
+                    if (!success)
+                    {
+                        lastError = Marshal.GetLastWin32Error();
+                        continue;
+                    }
+                    if (bytesReturned < 56) continue;
+
+                    uint nodeCount = BitConverter.ToUInt32(output, 8);
+                    for (uint nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++)
+                    {
+                        long nodeOffset64 = 16L + (nodeIndex * 40L);
+                        if (nodeOffset64 + 28 > bytesReturned) break;
+                        int nodeOffset = (int)nodeOffset64;
+                        uint deviceCount = BitConverter.ToUInt32(output, nodeOffset + 16);
+                        uint deviceDataOffset = BitConverter.ToUInt32(output, nodeOffset + 24);
+                        if (deviceCount == 0 || deviceDataOffset == 0 || deviceDataOffset + 24 > bytesReturned)
+                            continue;
+
+                        int code = BitConverter.ToInt32(output, (int)deviceDataOffset + 20);
+                        return new DiskFormFactorResult {
+                            Code = code,
+                            Name = GetFormFactorName(code),
+                            Source = propertyNames[propertyIndex],
+                            Detail = code == 0 ? "Sterownik zwrócił nieznany format." : ""
+                        };
+                    }
+                }
+
+                return new DiskFormFactorResult {
+                    Code = 0,
+                    Name = "Unknown",
+                    Source = "IOCTL_STORAGE_QUERY_PROPERTY",
+                    Detail = lastError == 0 ? "Sterownik nie zwrócił danych o formacie."
+                        : new Win32Exception(lastError).Message
+                };
+            }
+            finally { CloseHandle(handle); }
+        }
+
+        private static string GetFormFactorName(int code)
+        {
+            switch (code)
+            {
+                case 1: return "3.5 inch";
+                case 2: return "2.5 inch";
+                case 3: return "1.8 inch";
+                case 4: return "Less than 1.8 inch";
+                case 5: return "Embedded";
+                case 6: return "Memory Card";
+                case 7: return "mSATA";
+                case 8: return "M.2";
+                case 9: return "PCIe Board";
+                case 10: return "DIMM";
+                default: return "Unknown";
+            }
+        }
+    }
+}
+'@ -ErrorAction Stop
+}
+
+function Get-NativeDiskFormFactor {
+    param([Parameter(Mandatory)][int]$DiskNumber)
+
+    Initialize-StorageTopologyApi
+    return [GetHardware.StorageTopology]::Query($DiskNumber)
+}
+
+function Test-DiskSerialNumber {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return $Value.Trim() -notmatch '^(0+|Unknown|None|N/A|Default string|Not Specified)$'
+}
+
+function Get-NormalizedDiskSerialNumber {
+    param(
+        [AllowNull()][string]$SerialNumber,
+        [AllowNull()][string]$UniqueId
+    )
+
+    $Serial = ([string]$SerialNumber).Trim().TrimEnd('.')
+    if ($Serial -match '^(?:[0-9A-Fa-f]{4}_)+[0-9A-Fa-f]{4}$') {
+        $Serial = $Serial -replace '_', ''
+    }
+    if (Test-DiskSerialNumber -Value $Serial) { return $Serial }
+
+    $Fallback = ([string]$UniqueId).Trim()
+    if ($Fallback -match '^(?i)eui\.(?<serial>[0-9a-f]+)$') {
+        return $Matches['serial'].ToUpperInvariant()
+    }
+    return ''
+}
+
+function Get-NormalizedDiskModel {
+    param(
+        [AllowNull()][string]$Model,
+        [AllowNull()][string]$FriendlyName,
+        [Parameter(Mandatory)][int64]$CapacityGb,
+        [AllowNull()][string]$BusType,
+        [AllowNull()][string]$MediaType
+    )
+
+    $Value = if (-not [string]::IsNullOrWhiteSpace($Model)) { $Model } else { $FriendlyName }
+    $Value = ([string]$Value -replace '\s+', ' ').Trim()
+    $Value = [regex]::Replace($Value, "(?i)(?<!\d)$CapacityGb\s*(?:GB|G)\b", '')
+    foreach ($RedundantValue in @($BusType, $MediaType)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$RedundantValue)) {
+            $Value = [regex]::Replace($Value, "(?i)(?<![A-Z0-9])$([regex]::Escape([string]$RedundantValue))(?![A-Z0-9])", '')
+        }
+    }
+    return ($Value -replace '\s+', ' ').Trim(' ', '-', '_')
+}
+
+function Get-DiskConnectionDefault {
+    param([AllowNull()][string]$BusType)
+
+    switch -Regex (([string]$BusType).Trim()) {
+        '^(?i)NVMe$' { return 'M.2' }
+        '^(?i)SATA|ATA$' { return 'SATA' }
+        '^(?i)USB$' { return 'USB' }
+        '^(?i)SAS$' { return 'SAS' }
+        default { return ([string]$BusType).Trim() }
+    }
+}
+
+function Convert-DiskFormFactorToConnection {
+    param([AllowNull()][string]$FormFactor)
+
+    switch (([string]$FormFactor).Trim()) {
+        'M.2' { return 'M.2' }
+        'mSATA' { return 'mSATA' }
+        '3.5 inch' { return '3.5"' }
+        '2.5 inch' { return '2.5"' }
+        '1.8 inch' { return '1.8"' }
+        'Less than 1.8 inch' { return '<1.8"' }
+        'Embedded' { return 'on board' }
+        'Memory Card' { return 'Memory Card' }
+        'PCIe Board' { return 'PCIe' }
+        'DIMM' { return 'DIMM' }
+        default { return '' }
+    }
+}
+
+function New-PhysicalDiskPart {
+    param([Parameter(Mandatory)][psobject]$Disk)
+
+    $Size = Get-OptionalPropertyValue -InputObject $Disk -Name 'Size'
+    if ($null -eq $Size -or [double]$Size -le 0) { throw 'Brak prawidłowej pojemności dysku.' }
+    $CapacityGb = [int64][math]::Round([double]$Size / 1000000000)
+    $BusType = ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'BusType')).Trim()
+    $MediaType = ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'MediaType')).Trim()
+    if ($MediaType -eq 'Unspecified') { $MediaType = '' }
+    $Model = Get-NormalizedDiskModel `
+        -Model ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'Model')) `
+        -FriendlyName ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'FriendlyName')) `
+        -CapacityGb $CapacityGb `
+        -BusType $BusType `
+        -MediaType $MediaType
+    $Description = (@("${CapacityGb}GB", $BusType, $MediaType, $Model) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
+    $Serial = Get-NormalizedDiskSerialNumber `
+        -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
+        -UniqueId ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'UniqueId'))
+
+    $DiskNumber = 0
+    $DeviceId = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'DeviceId')
+    if (-not [int]::TryParse($DeviceId, [ref]$DiskNumber)) {
+        throw "Nieprawidłowy DeviceId dysku: '$DeviceId'."
+    }
+
+    $NativeFormat = $null
+    try { $NativeFormat = Get-NativeDiskFormFactor -DiskNumber $DiskNumber }
+    catch { $NativeFormat = $null }
+    $Connection = if ($null -ne $NativeFormat) {
+        Convert-DiskFormFactorToConnection -FormFactor ([string]$NativeFormat.Name)
+    } else { '' }
+    if ([string]::IsNullOrWhiteSpace($Connection)) {
+        Write-Warning "Nie udało się automatycznie ustalić formatu dysku: $Description"
+        $Connection = Read-TextValue `
+            -Prompt 'Połączenie/format dysku — Enter zatwierdza podpowiedź, możesz też wpisać własną wartość' `
+            -Default (Get-DiskConnectionDefault -BusType $BusType)
+    }
+
+    $Health = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'HealthStatus')
+    if (-not [string]::IsNullOrWhiteSpace($Health) -and $Health -ne 'Healthy') {
+        Write-Warning "Dysk '$Description' zgłasza HealthStatus: $Health."
+    }
+
+    return New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+}
+
+function New-Win32DiskPart {
+    param([Parameter(Mandatory)][psobject]$Disk)
+
+    $Size = Get-OptionalPropertyValue -InputObject $Disk -Name 'Size'
+    if ($null -eq $Size -or [double]$Size -le 0) { throw 'Brak prawidłowej pojemności dysku.' }
+    $CapacityGb = [int64][math]::Round([double]$Size / 1000000000)
+    $Model = ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'Model') -replace '\s+', ' ').Trim()
+    $Description = "${CapacityGb}GB $Model".Trim()
+    $Interface = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'InterfaceType')
+    $PnpDeviceId = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'PNPDeviceID')
+    $DefaultConnection = if ($PnpDeviceId -match '(?i)NVME') { 'M.2' } else { Get-DiskConnectionDefault -BusType $Interface }
+    Write-Warning "Dokładne źródło danych dysku jest niedostępne: $Description"
+    $Connection = Read-TextValue `
+        -Prompt 'Połączenie/format dysku — Enter zatwierdza podpowiedź, możesz też wpisać własną wartość' `
+        -Default $DefaultConnection
+    $Serial = Get-NormalizedDiskSerialNumber `
+        -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
+        -UniqueId ''
+    return New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+}
+
+function Get-DiskInventoryParts {
+    $Parts = New-Object System.Collections.Generic.List[object]
+    $PhysicalDisks = @()
+    try { $PhysicalDisks = @(Get-PhysicalDisk -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się użyć Get-PhysicalDisk: $($_.Exception.Message)" }
+
+    if ($PhysicalDisks.Count -gt 0) {
+        foreach ($Disk in $PhysicalDisks) {
+            try { $Parts.Add((New-PhysicalDiskPart -Disk $Disk)) }
+            catch {
+                $Identity = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'FriendlyName')
+                Write-Warning "Pominięto dysk '$Identity': $($_.Exception.Message)"
+            }
+        }
+    }
+    else {
+        try {
+            foreach ($Disk in @(Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction Stop)) {
+                try { $Parts.Add((New-Win32DiskPart -Disk $Disk)) }
+                catch {
+                    $Identity = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'Model')
+                    Write-Warning "Pominięto dysk '$Identity': $($_.Exception.Message)"
+                }
+            }
+        }
+        catch { Write-Warning "Nie udało się odczytać dysków z Win32_DiskDrive: $($_.Exception.Message)" }
+    }
+
+    return $Parts.ToArray()
+}
+
 function New-HardwarePart {
     param(
         [Parameter(Mandatory)][string]$Type,
@@ -935,18 +1240,12 @@ function Get-HardwareParts {
         $Parts.Add($MemoryPart)
     }
 
-    # DYSKI: pojemność jest liczona dziesiętnie, aby odpowiadała oznaczeniom
-    # producentów (np. około 256 GB zamiast 238 GiB).
-    try {
-        foreach ($Disk in @(Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction Stop)) {
-            $CapacityGb = [math]::Round([double]$Disk.Size / 1000000000)
-            $Description = "$($CapacityGb)GB $(([string]$Disk.Model).Trim())".Trim()
-            $Connection = if ([string]$Disk.PNPDeviceID -match 'NVME') { 'M.2' } elseif ($Disk.InterfaceType) { [string]$Disk.InterfaceType } else { '' }
-            $Parts.Add((New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection))
-        }
-    }
-    catch {
-        Write-Warning "Nie udało się odczytać dysków: $($_.Exception.Message)"
+    # DYSKI: Get-PhysicalDisk dostarcza magistralę, typ nośnika, stan i stabilne
+    # identyfikatory. Format fizyczny jest odczytywany natywnym zapytaniem Windows;
+    # gdy sterownik go nie udostępnia, użytkownik zatwierdza podpowiedź z BusType.
+    # Pojemność pozostaje dziesiętna, zgodna z oznaczeniami producentów.
+    foreach ($DiskPart in @(Get-DiskInventoryParts)) {
+        $Parts.Add($DiskPart)
     }
 
     # SIEĆ: zachowujemy wszystkie fizyczne adaptery z adresem MAC, w tym

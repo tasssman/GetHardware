@@ -126,16 +126,17 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Dyski
 
-- [ ] Zastąpić lub uzupełnić `Win32_DiskDrive` dokładniejszym źródłem danych.
+- [x] Zastąpić lub uzupełnić `Win32_DiskDrive` dokładniejszym źródłem danych.
   - Używać `Get-PhysicalDisk` albo `MSFT_PhysicalDisk` jako źródła podstawowego.
   - Pozostawić `Win32_DiskDrive` jako rozwiązanie awaryjne i źródło danych uzupełniających.
-  - Korelować rekordy z obu źródeł po stabilnym identyfikatorze, numerze seryjnym albo identyfikatorze urządzenia, a nie pozycji na liście.
+  - Nie łączyć rekordów na podstawie pozycji: `Win32_DiskDrive` jest używane tylko wtedy, gdy źródło podstawowe nie zwróci żadnych dysków.
 
-- [ ] Rozdzielić protokół, magistralę i format fizyczny dysku.
+- [x] Rozdzielić protokół, magistralę i format fizyczny dysku.
   - Nie zakładać bezwarunkowo, że każdy dysk NVMe ma format M.2.
   - Rozpoznawać `BusType`, np. NVMe, SATA, SAS i USB.
   - Rozpoznawać `MediaType`, np. SSD, HDD i SCM.
-  - Traktować M.2 jako wartość wymagającą potwierdzenia, jeśli system udostępnia tylko informację o NVMe.
+  - Format odczytywać przez `IOCTL_STORAGE_QUERY_PROPERTY`; gdy sterownik zwraca `Unknown`, poprosić użytkownika o zatwierdzenie podpowiedzi wynikającej z `BusType`.
+  - Dla NVMe z nieznanym formatem proponować `M.2`, ale nie zapisywać go bez zatwierdzenia.
 
 - [ ] Obsłużyć dyski zewnętrzne i nośniki wymienne.
   - Ustalić, czy dyski USB mają być automatycznie pomijane.
@@ -149,20 +150,20 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Jeśli sterownik pozwala, odczytywać temperaturę, zużycie, czas pracy oraz liczniki błędów przez `Get-StorageReliabilityCounter`.
   - Brak liczników niezawodności traktować jako brak danych, a nie błąd całej inwentaryzacji.
 
-- [ ] Przetwarzać każdy dysk niezależnie.
+- [x] Przetwarzać każdy dysk niezależnie.
   - Błąd odczytu jednego nośnika nie powinien usuwać pozostałych dysków z wyniku.
   - W ostrzeżeniu wskazywać konkretny model albo identyfikator problematycznego urządzenia.
 
-- [ ] Filtrować i normalizować identyfikatory dysków.
+- [x] Filtrować i normalizować identyfikatory dysków.
   - Usuwać zbędne spacje z modelu, producenta, firmware i numeru seryjnego.
   - Odrzucać puste numery seryjne i typowe wartości zastępcze.
   - Unikać powtarzania słów takich jak `NVMe` lub nazwy producenta, jeśli występują już w modelu.
 
-- [ ] Ustalić docelowy format wpisu dysku w PHP.
+- [x] Ustalić docelowy format wpisu dysku w PHP.
   - Zachować typ części `Hard Disk`, jeśli wymaga tego istniejący importer.
-  - Zdecydować, czy `SSD`, `HDD` albo `NVMe` ma być zawsze dodawane do `desc`.
-  - Zdecydować, czy numer seryjny dysku ma trafiać do opcjonalnego pola `sn`.
-  - Zdecydować, czy ostrzegać i blokować zapis, gdy `HealthStatus` nie jest `Healthy`.
+  - Do `desc` dodawać pojemność dziesiętną, `BusType`, `MediaType` i oczyszczony model bez powtórzeń.
+  - Poprawny numer seryjny zapisywać w opcjonalnym polu `sn`; normalizować format NVMe z grupami rozdzielonymi znakami `_`.
+  - Gdy `HealthStatus` nie jest `Healthy`, ostrzegać użytkownika; wpis nadal trafia do istniejącego przeglądu podzespołów.
   - Zachować pojemność dziesiętną, np. `256GB`, zgodną z oznaczeniem producenta.
 
 ### Karty sieciowe

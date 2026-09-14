@@ -51,6 +51,30 @@ function Get-PnpDeviceProperty {
     param([string]$InstanceId, [string]$KeyName, $ErrorAction)
     return [pscustomobject]@{ Data = @() }
 }
+function Get-PhysicalDisk {
+    param($ErrorAction)
+    return [pscustomobject]@{
+        DeviceId          = '0'
+        FriendlyName      = 'EG6 KIOXIA 512GB'
+        Manufacturer      = ''
+        Model             = 'EG6 KIOXIA 512GB'
+        SerialNumber      = '8CE3_8E04_0558_F5B4.'
+        FirmwareVersion   = '11600104'
+        MediaType         = 'SSD'
+        BusType           = 'NVMe'
+        Size              = 512000000000
+        HealthStatus      = 'Healthy'
+        OperationalStatus = 'OK'
+        PhysicalLocation  = 'Integrated : Bus 1 : Device 0 : Function 0 : Adapter 0'
+        UniqueId          = 'eui.8CE38E040558F5B4'
+    }
+}
+$script:MockDiskFormFactorName = 'M.2'
+function Get-NativeDiskFormFactor {
+    param([int]$DiskNumber)
+    $Code = if ($script:MockDiskFormFactorName -eq 'M.2') { 8 } else { 0 }
+    return [pscustomobject]@{ Code = $Code; Name = $script:MockDiskFormFactorName; Source = 'Mock'; Detail = '' }
+}
 function Get-CimInstance {
     param(
         [string]$ClassName,
@@ -242,6 +266,11 @@ $TouchDisplayParts = @(ConvertTo-DisplayParts `
     -TouchDetected $true)
 Assert-True -Condition ($TouchDisplayParts[0].Desc -eq '14" 1920x1080 touch') -Message 'A detected HID touchscreen should add touch only to the internal matrix description.'
 
+$DiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
+Assert-True -Condition ($DiskPart.Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The disk description should contain decimal capacity, bus, media type, and a deduplicated model.'
+Assert-True -Condition ($DiskPart.Conn -eq 'M.2') -Message 'A native M.2 form factor should be accepted without an interactive fallback.'
+Assert-True -Condition ($DiskPart.Sn -eq '8CE38E040558F5B4') -Message 'The grouped NVMe serial number should be normalized.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
     -MemorySpec ([string]$TestModelEntry.memorySpec) `
@@ -259,6 +288,11 @@ function Read-Host {
     }
     return $script:MockReadHostValue
 }
+
+$script:MockDiskFormFactorName = 'Unknown'
+$UnknownFormatDiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
+Assert-True -Condition ($UnknownFormatDiskPart.Conn -eq 'M.2') -Message 'An unknown NVMe form factor should offer and accept M.2 as the default.'
+$script:MockDiskFormFactorName = 'M.2'
 
 $FallbackMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
@@ -282,6 +316,7 @@ Assert-True -Condition ($DetectedMockParts.Count -eq 7) -Message 'The mocked har
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Matrix').Desc -eq '14" 1920x1080') -Message 'The mocked scan should include the EDID-based matrix description.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'RAM').Count -eq 1) -Message 'The mocked scan should include RAM.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Count -eq 1) -Message 'The mocked scan should include a disk.'
+Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Hard Disk').Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The mocked scan should use Get-PhysicalDisk data.'
 
 $Inventory = [pscustomobject]@{
     ServiceTag    = '13QJ7D3'
