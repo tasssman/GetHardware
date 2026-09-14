@@ -1777,16 +1777,14 @@ function ConvertTo-MemoryInventory {
         $Types.Count -eq 1 -and
         $Speeds.Count -eq 1 -and
         $Placements.Count -eq 1 -and
-        $Placements[0] -ne 'unknown' -and
-        $MaximumCapacityGb -gt 0
+        $Placements[0] -ne 'unknown'
     )
     if ($SpecReliable) {
-        $MaxText = $MaximumCapacityGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
         if ($Placements[0] -eq 'soldered') {
-            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz soldered, max${MaxText}GB"
+            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz soldered"
         }
         elseif ($MemoryDeviceCount -gt 0) {
-            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz x$MemoryDeviceCount, max${MaxText}GB"
+            $DetectedSpec = "$($Types[0]) $($Speeds[0])MHz x$MemoryDeviceCount"
         }
         else {
             $SpecReliable = $false
@@ -1797,6 +1795,7 @@ function ConvertTo-MemoryInventory {
         Parts         = $Parts.ToArray()
         DetectedSpec  = $DetectedSpec
         SpecReliable  = $SpecReliable
+        ReportedMaximumCapacityGb = $MaximumCapacityGb
     }
 }
 
@@ -1825,6 +1824,38 @@ function Get-NormalizedMemorySpec {
 
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
     return ([regex]::Replace($Value.Trim(), '\s+', ' ')).ToUpperInvariant()
+}
+
+function Get-MemorySpecMaximumText {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $Match = [regex]::Match($Value, '(?i)(?:^|[\s,;(])max\s*(?<capacity>\d+(?:[.,]\d+)?)\s*GB\b')
+    if (-not $Match.Success) { return '' }
+    $Capacity = $Match.Groups['capacity'].Value.Replace(',', '.')
+    return "max${Capacity}GB"
+}
+
+function Test-MemorySpecHasMaximum {
+    param([AllowNull()][string]$Value)
+
+    return -not [string]::IsNullOrWhiteSpace((Get-MemorySpecMaximumText -Value $Value))
+}
+
+function Read-CompleteMemorySpec {
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [AllowNull()][string]$DetectedSpec
+    )
+
+    while ($true) {
+        $Value = Read-TextValue -Prompt 'Wpisz pełną konfigurację pamięci, łącznie z maksymalną pojemnością (np. DDR4 3200MHz x2, max64GB)' -Default $null
+        if (Test-MemorySpecHasMaximum -Value $Value) { return $Value.Trim() }
+        Write-Warning "Pole memorySpec dla modelu '$Model' musi zawierać maksymalną pojemność w formacie max...GB, np. max64GB."
+        if (-not [string]::IsNullOrWhiteSpace($DetectedSpec)) {
+            Write-Host "Dane wykryte automatycznie: $DetectedSpec" -ForegroundColor DarkGray
+        }
+    }
 }
 
 function Set-ModelMemorySpec {
@@ -1869,8 +1900,29 @@ function Resolve-MemorySpec {
     )
 
     $DatabaseSpec = ([string]$ModelEntry.memorySpec).Trim()
-    $DetectedSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
-    $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedSpec)
+    $DetectedBaseSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
+    $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedBaseSpec)
+
+    if (-not (Test-MemorySpecHasMaximum -Value $DatabaseSpec)) {
+        Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
+        Write-Warning "Pole memorySpec dla modelu '$($ModelEntry.model)' nie zawiera maksymalnej obsługiwanej pamięci."
+        if ($DetectedReliable) {
+            Write-Host "Dane wykryte automatycznie: $DetectedBaseSpec" -ForegroundColor Green
+        }
+        Write-Host 'Uzupełnij pełną specyfikację na podstawie dokumentacji producenta, np. DDR4 3200MHz x2, max64GB.'
+        $CustomSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+        Write-Host '[1] Zapisz tę wartość w JSON'
+        Write-Host '[2] Użyj jej tylko dla tego komputera'
+        $SaveChoice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+        if ($SaveChoice -eq 1) {
+            Set-ModelMemorySpec -DatabasePath $DatabasePath -Model ([string]$ModelEntry.model) -MemorySpec $CustomSpec
+            $ModelEntry.memorySpec = $CustomSpec
+        }
+        return $CustomSpec
+    }
+
+    $MaximumText = Get-MemorySpecMaximumText -Value $DatabaseSpec
+    $DetectedSpec = if ($DetectedReliable) { "$DetectedBaseSpec, $MaximumText" } else { '' }
 
     if ($DetectedReliable -and
         (Get-NormalizedMemorySpec -Value $DetectedSpec) -eq (Get-NormalizedMemorySpec -Value $DatabaseSpec)) {

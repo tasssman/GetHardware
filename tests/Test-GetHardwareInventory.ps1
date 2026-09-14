@@ -271,7 +271,8 @@ Assert-True -Condition ($SlotMemory.Parts.Count -eq 2) -Message 'Replaceable RAM
 Assert-True -Condition ($SlotMemory.Parts[0].Desc -eq '16GB 3200MHz DDR4') -Message 'RAM parts should use rated Speed instead of ConfiguredClockSpeed.'
 Assert-True -Condition ($SlotMemory.Parts[0].Conn -eq 'on board') -Message 'Replaceable RAM should use the agreed on board connection.'
 Assert-True -Condition ($SlotMemory.Parts[0].Sn -eq '16596967') -Message 'A valid RAM serial number should be preserved.'
-Assert-True -Condition ($SlotMemory.DetectedSpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'Slot count and maximum capacity should form memorySpec.'
+Assert-True -Condition ($SlotMemory.DetectedSpec -eq 'DDR4 3200MHz x4') -Message 'Detected memorySpec should contain type, speed, and slot count without trusting SMBIOS maximum capacity.'
+Assert-True -Condition ($SlotMemory.ReportedMaximumCapacityGb -eq 128) -Message 'The SMBIOS maximum should remain available only as diagnostic data.'
 
 $MemoryWithInvalidRecord = ConvertTo-MemoryInventory `
     -MemoryDevices @(
@@ -295,7 +296,7 @@ Assert-True -Condition ($SolderedMemory.Parts.Count -eq 1) -Message 'Soldered me
 Assert-True -Condition ($SolderedMemory.Parts[0].Desc -eq '16GB 4267MHz LPDDR4') -Message 'Grouped soldered memory should contain total capacity, rated speed, and type.'
 Assert-True -Condition ($SolderedMemory.Parts[0].Conn -eq 'soldered') -Message 'Motherboard LPDDR memory should be marked as soldered.'
 Assert-True -Condition ($SolderedMemory.Parts[0].Sn -eq '') -Message 'Placeholder RAM serial numbers should be discarded.'
-Assert-True -Condition ($SolderedMemory.DetectedSpec -eq 'LPDDR4 4267MHz soldered, max16GB') -Message 'Soldered memorySpec should not treat memory devices as slots.'
+Assert-True -Condition ($SolderedMemory.DetectedSpec -eq 'LPDDR4 4267MHz soldered') -Message 'Soldered memorySpec should not treat memory devices as slots or trust SMBIOS maximum capacity.'
 
 $DisplayParts = @(ConvertTo-DisplayParts `
     -MonitorIds @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; Active = $true; SerialNumberID = [byte[]](48, 0) }) `
@@ -369,6 +370,15 @@ Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'laptop' -Detect
 $script:MockReadHostQueue.Enqueue('2')
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'desktop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'The user should be able to use the detected type for the current device.'
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'server' -DetectedDeviceType '' -ChassisDescription 'Unknown (2)') -eq 'server') -Message 'An unknown chassis type should preserve the database value without a question.'
+
+Assert-True -Condition (Test-MemorySpecHasMaximum -Value 'DDR4 3200MHz x2, max64GB') -Message 'A complete memorySpec should contain max...GB.'
+Assert-True -Condition (-not (Test-MemorySpecHasMaximum -Value 'DDR4 2x16GB 3200MHz')) -Message 'An installed-memory description without max...GB should be incomplete.'
+$IncompleteModelEntry = [pscustomobject]@{ model = 'Incomplete memory model'; memorySpec = 'DDR4 2x16GB 3200MHz' }
+$IncompleteMemoryInventory = [pscustomobject]@{ DetectedSpec = 'DDR4 3200MHz x2'; SpecReliable = $true }
+$script:MockReadHostQueue.Enqueue('DDR4 3200MHz x2, max64GB')
+$script:MockReadHostQueue.Enqueue('2')
+$CompletedMemorySpec = Resolve-MemorySpec -ModelEntry $IncompleteModelEntry -MemoryInventory $IncompleteMemoryInventory -DatabasePath (Join-Path $ProjectRoot 'hardware-models.json')
+Assert-True -Condition ($CompletedMemorySpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'An incomplete JSON memorySpec should require a complete interactive value.'
 
 $script:MockDiskFormFactorName = 'Unknown'
 $UnknownFormatDiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
@@ -490,10 +500,10 @@ try {
         -ModelEntry $TestModelBeforeMemoryUpdate `
         -MemoryInventory $SlotMemory `
         -DatabasePath $TestModelDatabase
-    Assert-True -Condition ($ResolvedMemorySpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'The detected memorySpec should be selected for the current PHP record.'
+    Assert-True -Condition ($ResolvedMemorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'The detected type, speed, and slots should retain the manually verified maximum from JSON.'
     $UpdatedModels = @(Import-ModelDatabase -Path $TestModelDatabase)
     $UpdatedModel = $UpdatedModels | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
-    Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max128GB') -Message 'Only the selected model memorySpec should be updated in JSON.'
+    Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'Updating memorySpec should never replace the verified maximum with SMBIOS MaxCapacityEx.'
     Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
     $ExistingTestCollection = [pscustomobject]@{

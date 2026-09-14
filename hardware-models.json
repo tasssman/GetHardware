@@ -182,7 +182,7 @@
   {
     "model": "Latitude 5421",
     "baseboardFallback": "Dell Inc. 0FFCXR",
-    "memorySpec": "DDR4 2x16GB 3200MHz",
+    "memorySpec": "DDR4 3200MHz x2, max64GB",
     "powerMaxW": 65,
     "powerW": 62,
     "other": "",

@@ -82,8 +82,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [x] Po opracowaniu odczytu RAM uzupełnić sposób budowania pola `mainb`.
   - Połączyć rzeczywiste dane płyty z `Win32_BaseBoard` z opisem obsługiwanej konfiguracji pamięci RAM.
   - Zachować format zbliżony do `Latitude 7420 (DDR3L 1600MHz x2, max8GB)`.
-  - Typ, znamionowa szybkość, liczba urządzeń pamięci i maksymalna pojemność są odczytywane automatycznie, gdy dane SMBIOS są jednoznaczne.
-  - Przy różnicy względem `memorySpec` użytkownik wybiera wartość dla PHP i decyduje, czy zaktualizować JSON.
+  - Typ, znamionowa szybkość i liczba gniazd są odczytywane automatycznie, gdy dane SMBIOS są jednoznaczne.
+  - `MaxCapacity` i `MaxCapacityEx` zachowywać wyłącznie diagnostycznie, ponieważ mogą opisywać teoretyczny limit kontrolera zamiast limitu zatwierdzonego dla konkretnego modelu.
+  - Maksymalna pojemność musi pochodzić z ręcznie zweryfikowanego `memorySpec` w JSON i mieć zapis `max...GB`.
+  - Jeśli `memorySpec` nie zawiera `max...GB`, ostrzec użytkownika, wymusić wpisanie pełnej wartości i zapytać, czy zapisać ją w JSON.
+  - Przy różnicy typu, szybkości lub liczby gniazd względem `memorySpec` użytkownik wybiera wartość dla PHP i decyduje, czy zaktualizować JSON; automatyczny odczyt nie zastępuje ręcznie zweryfikowanego maksimum.
   - Nie mylić aktualnie zainstalowanej pamięci z maksymalną pamięcią obsługiwaną przez płytę główną.
 
 - [x] Poprawić rozpoznawanie pamięci lutowanej i wymiennej.
@@ -222,13 +225,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Pomijać kontrolery Intel Smart Sound Technology, ponieważ nie są osobnymi kartami dźwiękowymi.
   - Gdy jedynym kandydatem jest `Realtek USB Audio`, pytać użytkownika, czy jest to wewnętrzny kodek laptopa.
 
-- [ ] Rozszerzyć dane urządzenia audio dostępne podczas weryfikacji.
-  - Odczytywać `Caption`, `Description`, `Manufacturer`, `ProductName`, `PNPDeviceID`, `Status` i `ConfigManagerErrorCode`.
-  - Powiązać urządzenie z `Win32_PnPSignedDriver`.
-  - Pokazywać wersję i datę sterownika, dostawcę, nazwę INF oraz status podpisu cyfrowego.
-  - Dane sterownika wykorzystywać diagnostycznie, bez dodawania ich do PHP.
-
-- [ ] Walidować stan urządzeń audio.
+- [x] Walidować stan urządzeń audio.
   - [x] Ostrzegać, gdy `ConfigManagerErrorCode` jest inny niż `0` albo `Status` nie wskazuje poprawnego działania.
   - Ostrzegać przy ogólnym sterowniku lub nazwie `High Definition Audio Device`.
   - [x] Ostrzegać, jeśli w laptopie nie znaleziono żadnego wewnętrznego kodeka.
@@ -237,10 +234,6 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [x] Przetwarzać każde urządzenie audio niezależnie.
   - Błąd pojedynczego wpisu nie powinien usuwać wszystkich urządzeń audio z wyniku.
   - W ostrzeżeniu wskazywać nazwę albo identyfikator problematycznego urządzenia.
-
-- [ ] Rozważyć pomocniczy odczyt endpointów przez MMDevice API.
-  - Używać go wyłącznie diagnostycznie do pokazania głośników, mikrofonów, słuchawek i wyjść HDMI.
-  - Nie tworzyć automatycznie osobnego wpisu PHP dla każdego endpointu należącego do tego samego kodeka.
 
 - [x] Zachować prosty format głównego kodeka w PHP.
   - Pozostawić typ `Sound Card`.
@@ -355,13 +348,6 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [x] Usunąć zduplikowaną regułę `Vostro 3400`.
   - Obie gałęzie `switch` są wykonywane, przez co powstaje osiem wartości, a kod wykorzystuje tylko pierwsze cztery.
   - Do JSON przeniesiono późniejszy wpis: 65 W / 55 W, `max16GB x2 DDR4`; wartości nadal wymagają weryfikacji merytorycznej.
-
-- [ ] Poprawić wykrywanie monitorów i matrycy.
-  - Obecnie rozdzielczość ostatniego wykrytego ekranu jest przypisywana wszystkim monitorom.
-  - Nie klasyfikować urządzenia jako `Monitor` lub `Matrix` wyłącznie na podstawie długości numeru seryjnego.
-  - Powiązać rozdzielczość, nazwę i numer seryjny z tym samym ekranem.
-  - Wiarygodniej wykrywać ekran dotykowy.
-  - [ ] Przetestować możliwość zebrania danych o monitorze bez jego podłączenia.
 
 - [x] Poprawić rozpoznawanie laptopów, tabletów i urządzeń 2-w-1.
   - Warunek `PCSystemType -eq 2` może pominąć tablety i urządzenia konwertowalne.
