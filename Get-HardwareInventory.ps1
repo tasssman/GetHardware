@@ -1622,6 +1622,153 @@ function Get-SoundInventoryParts {
     return $Parts.ToArray()
 }
 
+function Get-BatteryReportData {
+    $TemporaryPath = Join-Path ([IO.Path]::GetTempPath()) ("GetHardware-battery-$([guid]::NewGuid().ToString('N')).xml")
+    try {
+        $null = & powercfg.exe /batteryreport /xml /output $TemporaryPath 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $TemporaryPath -PathType Leaf)) {
+            throw 'Polecenie powercfg nie utworzyło raportu baterii.'
+        }
+
+        $Report = New-Object Xml.XmlDocument
+        $Report.Load($TemporaryPath)
+        return @($Report.BatteryReport.Batteries.Battery)
+    }
+    finally {
+        if (Test-Path -LiteralPath $TemporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $TemporaryPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function ConvertTo-BatteryNumber {
+    param([AllowNull()]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
+    $Number = 0.0
+    if ([double]::TryParse([string]$Value, [Globalization.NumberStyles]::Float,
+        [Globalization.CultureInfo]::InvariantCulture, [ref]$Number)) { return $Number }
+    if ([double]::TryParse([string]$Value, [ref]$Number)) { return $Number }
+    return $null
+}
+
+function Find-Win32BatteryForReport {
+    param(
+        [Parameter(Mandatory)][psobject]$ReportBattery,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Win32Batteries
+    )
+
+    $ReportId = ([string](Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'Id')).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($ReportId)) {
+        $Match = $Win32Batteries | Where-Object {
+            ([string](Get-OptionalPropertyValue -InputObject $_ -Name 'Name')).Trim() -ieq $ReportId -or
+            ([string](Get-OptionalPropertyValue -InputObject $_ -Name 'DeviceID')) -like "*$ReportId*"
+        } | Select-Object -First 1
+        if ($null -ne $Match) { return $Match }
+    }
+    if ($Win32Batteries.Count -eq 1) { return $Win32Batteries[0] }
+    return $null
+}
+
+function New-BatteryInventoryPart {
+    param(
+        [AllowNull()][psobject]$ReportBattery,
+        [AllowNull()][psobject]$Win32Battery
+    )
+
+    $DeviceName = ''
+    $Manufacturer = ''
+    $DesignCapacity = $null
+    $FullChargeCapacity = $null
+    $CycleCount = $null
+    if ($null -ne $ReportBattery) {
+        $DeviceName = ([string](Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'Id')).Trim()
+        $Manufacturer = ([string](Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'Manufacturer')).Trim()
+        $DesignCapacity = ConvertTo-BatteryNumber -Value (Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'DesignCapacity')
+        $FullChargeCapacity = ConvertTo-BatteryNumber -Value (Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'FullChargeCapacity')
+        $RawCycleCount = ConvertTo-BatteryNumber -Value (Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'CycleCount')
+        # Przy zużytej baterii wartość 0 zwykle oznacza brak obsługi licznika,
+        # dlatego nie prezentujemy jej jako rzeczywistych zero cykli.
+        if ($null -ne $RawCycleCount -and $RawCycleCount -gt 0) { $CycleCount = [int64]$RawCycleCount }
+    }
+    if ([string]::IsNullOrWhiteSpace($DeviceName) -and $null -ne $Win32Battery) {
+        $DeviceName = ([string](Get-OptionalPropertyValue -InputObject $Win32Battery -Name 'Name')).Trim()
+    }
+
+    $HealthPercent = $null
+    $WearPercent = $null
+    if ($null -ne $DesignCapacity -and $null -ne $FullChargeCapacity -and $DesignCapacity -gt 0 -and $FullChargeCapacity -gt 0) {
+        $HealthPercent = [math]::Round(($FullChargeCapacity / $DesignCapacity) * 100, 1)
+        $WearPercent = [math]::Round(100 - $HealthPercent, 1)
+        if ($HealthPercent -lt 80) {
+            Write-Warning "Kondycja baterii '$DeviceName' wynosi tylko $($HealthPercent.ToString('0.0', [Globalization.CultureInfo]::CurrentCulture))%."
+        }
+    }
+
+    $Status = if ($null -ne $Win32Battery) {
+        [string](Get-OptionalPropertyValue -InputObject $Win32Battery -Name 'Status')
+    } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($Status) -and $Status -ne 'OK') {
+        Write-Warning "Bateria '$DeviceName' zgłasza Status: $Status."
+    }
+
+    $ChargePercent = if ($null -ne $Win32Battery) {
+        ConvertTo-BatteryNumber -Value (Get-OptionalPropertyValue -InputObject $Win32Battery -Name 'EstimatedChargeRemaining')
+    } else { $null }
+    $VoltageMv = if ($null -ne $Win32Battery) {
+        ConvertTo-BatteryNumber -Value (Get-OptionalPropertyValue -InputObject $Win32Battery -Name 'DesignVoltage')
+    } else { $null }
+
+    # Numer seryjny baterii jest celowo ignorowany. Użytkownik skanuje go
+    # bezpośrednio z etykiety, a importer oczekuje pustego pola sn.
+    $Part = New-HardwarePart -Type 'Battery' -Description 'Internal Battery' -Connection '' -SerialNumber ''
+    $Part | Add-Member -NotePropertyName BatteryDeviceName -NotePropertyValue $DeviceName
+    $Part | Add-Member -NotePropertyName BatteryManufacturer -NotePropertyValue $Manufacturer
+    $Part | Add-Member -NotePropertyName BatteryDesignCapacityMWh -NotePropertyValue $DesignCapacity
+    $Part | Add-Member -NotePropertyName BatteryFullChargeCapacityMWh -NotePropertyValue $FullChargeCapacity
+    $Part | Add-Member -NotePropertyName BatteryHealthPercent -NotePropertyValue $HealthPercent
+    $Part | Add-Member -NotePropertyName BatteryWearPercent -NotePropertyValue $WearPercent
+    $Part | Add-Member -NotePropertyName BatteryCycleCount -NotePropertyValue $CycleCount
+    $Part | Add-Member -NotePropertyName BatteryStatus -NotePropertyValue $Status
+    $Part | Add-Member -NotePropertyName BatteryChargePercent -NotePropertyValue $ChargePercent
+    $Part | Add-Member -NotePropertyName BatteryVoltageMv -NotePropertyValue $VoltageMv
+    return $Part
+}
+
+function Get-BatteryInventoryParts {
+    $Parts = New-Object System.Collections.Generic.List[object]
+    $Win32Batteries = @()
+    $ReportBatteries = @()
+
+    try { $Win32Batteries = @(Get-CimInstance -ClassName Win32_Battery -ErrorAction Stop) }
+    catch { Write-Warning "Nie udało się odczytać baterii z Win32_Battery: $($_.Exception.Message)" }
+    try { $ReportBatteries = @(Get-BatteryReportData) }
+    catch { Write-Warning "Nie udało się odczytać raportu baterii z powercfg: $($_.Exception.Message)" }
+
+    if ($ReportBatteries.Count -gt 0) {
+        foreach ($ReportBattery in $ReportBatteries) {
+            try {
+                $Win32Battery = Find-Win32BatteryForReport -ReportBattery $ReportBattery -Win32Batteries $Win32Batteries
+                $Parts.Add((New-BatteryInventoryPart -ReportBattery $ReportBattery -Win32Battery $Win32Battery))
+            }
+            catch {
+                $Identity = [string](Get-OptionalPropertyValue -InputObject $ReportBattery -Name 'Id')
+                Write-Warning "Pominięto baterię '$Identity': $($_.Exception.Message)"
+            }
+        }
+        return $Parts.ToArray()
+    }
+
+    foreach ($Win32Battery in $Win32Batteries) {
+        try { $Parts.Add((New-BatteryInventoryPart -ReportBattery $null -Win32Battery $Win32Battery)) }
+        catch {
+            $Identity = [string](Get-OptionalPropertyValue -InputObject $Win32Battery -Name 'Name')
+            Write-Warning "Pominięto baterię '$Identity': $($_.Exception.Message)"
+        }
+    }
+    return $Parts.ToArray()
+}
+
 function Get-GraphicsDescription {
     param([Parameter(Mandatory)][psobject]$Graphics)
 
@@ -2120,15 +2267,12 @@ function Get-HardwareParts {
         Write-Warning "Nie udało się odczytać kart graficznych: $($_.Exception.Message)"
     }
 
-    # BATERIA: brak wpisów jest prawidłowy dla komputerów stacjonarnych.
-    try {
-        foreach ($Battery in @(Get-CimInstance -ClassName Win32_Battery -ErrorAction Stop)) {
-            $Description = if ($Battery.Name) { [string]$Battery.Name } else { [string]$Battery.Description }
-            $Parts.Add((New-HardwarePart -Type 'Battery' -Description $Description -Connection ''))
-        }
-    }
-    catch {
-        Write-Warning "Nie udało się odczytać baterii: $($_.Exception.Message)"
+    # BATERIA: powercfg dostarcza pojemność projektową i pełną, a Win32_Battery
+    # bieżący stan, naładowanie i napięcie. Do PHP trafia wyłącznie prosty wpis
+    # Internal Battery z celowo pustym polem sn. Brak baterii jest prawidłowy dla
+    # komputerów stacjonarnych.
+    foreach ($BatteryPart in @(Get-BatteryInventoryParts)) {
+        $Parts.Add($BatteryPart)
     }
 
     if ($Parts.Count -eq 0) {
@@ -2203,6 +2347,63 @@ function Show-DiskHealthInformation {
     }
 }
 
+function Format-BatteryCapacity {
+    param([AllowNull()]$CapacityMWh)
+
+    if ($null -eq $CapacityMWh -or [string]::IsNullOrWhiteSpace([string]$CapacityMWh)) { return 'brak danych' }
+    try { $CapacityWh = [double]$CapacityMWh / 1000 }
+    catch { return 'brak danych' }
+    if ($CapacityWh -lt 0) { return 'brak danych' }
+    return "$($CapacityWh.ToString('0.000', [Globalization.CultureInfo]::CurrentCulture)) Wh"
+}
+
+function Format-BatteryPercent {
+    param([AllowNull()]$Value)
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return 'brak danych' }
+    try { $Percent = [double]$Value }
+    catch { return 'brak danych' }
+    if ($Percent -lt 0) { return 'brak danych' }
+    return "$($Percent.ToString('0.0', [Globalization.CultureInfo]::CurrentCulture))%"
+}
+
+function Format-BatteryVoltage {
+    param([AllowNull()]$VoltageMv)
+
+    if ($null -eq $VoltageMv -or [string]::IsNullOrWhiteSpace([string]$VoltageMv)) { return 'brak danych' }
+    try { $VoltageV = [double]$VoltageMv / 1000 }
+    catch { return 'brak danych' }
+    if ($VoltageV -le 0) { return 'brak danych' }
+    return "$($VoltageV.ToString('0.000', [Globalization.CultureInfo]::CurrentCulture)) V"
+}
+
+function Show-BatteryHealthInformation {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts)
+
+    foreach ($Battery in @($Parts | Where-Object Pt -EQ 'Battery')) {
+        $DeviceName = [string](Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryDeviceName')
+        if ([string]::IsNullOrWhiteSpace($DeviceName)) { $DeviceName = 'Internal Battery' }
+        $Manufacturer = [string](Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryManufacturer')
+        if ([string]::IsNullOrWhiteSpace($Manufacturer)) { $Manufacturer = 'brak danych' }
+        $Status = [string](Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryStatus')
+        if ([string]::IsNullOrWhiteSpace($Status)) { $Status = 'brak danych' }
+        $CycleCount = Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryCycleCount'
+        $CycleText = if ($null -eq $CycleCount) { 'brak danych' } else { [string]$CycleCount }
+
+        Write-Section -Title 'Stan baterii'
+        Write-Host "Bateria:              $DeviceName"
+        Write-Host "Producent:             $Manufacturer"
+        Write-Host "Pojemność projektowa:  $(Format-BatteryCapacity -CapacityMWh (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryDesignCapacityMWh'))"
+        Write-Host "Pełna pojemność:       $(Format-BatteryCapacity -CapacityMWh (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryFullChargeCapacityMWh'))"
+        Write-Host "Kondycja:              $(Format-BatteryPercent -Value (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryHealthPercent'))"
+        Write-Host "Zużycie:               $(Format-BatteryPercent -Value (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryWearPercent'))"
+        Write-Host "Liczba cykli:          $CycleText"
+        Write-Host "Stan urządzenia:       $Status"
+        Write-Host "Poziom naładowania:    $(Format-BatteryPercent -Value (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryChargePercent'))"
+        Write-Host "Napięcie:              $(Format-BatteryVoltage -VoltageMv (Get-OptionalPropertyValue -InputObject $Battery -Name 'BatteryVoltageMv'))"
+    }
+}
+
 function Show-HardwareParts {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Parts,
@@ -2227,6 +2428,7 @@ function Show-HardwareParts {
     Write-Host $Mainboard
 
     Show-DiskHealthInformation -Parts $Parts
+    Show-BatteryHealthInformation -Parts $Parts
 
     Write-Section -Title 'Wykryte podzespoły'
     $Rows = for ($Index = 0; $Index -lt $Parts.Count; $Index++) {
@@ -2451,7 +2653,7 @@ function New-PhpRecordBody {
     $Lines.Add('unset($partsLapt);$partsLapt = array();')
     foreach ($Part in $Parts) {
         $Line = "`$partsLapt[]=array('pt'=>'$(ConvertTo-PhpSingleQuotedValue $Part.Pt)', 'desc'=>'$(ConvertTo-PhpSingleQuotedValue $Part.Desc)', 'conn'=>'$(ConvertTo-PhpSingleQuotedValue $Part.Conn)'"
-        if (-not [string]::IsNullOrWhiteSpace([string]$Part.Sn)) {
+        if ($Part.Pt -eq 'Battery' -or -not [string]::IsNullOrWhiteSpace([string]$Part.Sn)) {
             $Line += ", 'sn'=>'$(ConvertTo-PhpSingleQuotedValue $Part.Sn)'"
         }
         $Line += ');'

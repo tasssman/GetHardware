@@ -241,7 +241,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Karta graficzna
 
-- [ ] Zastąpić albo uzupełnić `Win32_VideoController` dokładniejszym źródłem danych o pamięci GPU.
+- [x] Zastąpić albo uzupełnić `Win32_VideoController` dokładniejszym źródłem danych o pamięci GPU.
   - Nie traktować `AdapterRAM` jako wiarygodnej ilości pamięci dla współczesnych kart graficznych.
   - Uwzględnić ograniczenie 32-bitowego pola `AdapterRAM`, szczególnie dla kart mających więcej niż 4 GB VRAM.
   - Rozważyć użycie DXGI do odczytu 64-bitowych wartości pamięci dedykowanej, dedykowanej pamięci systemowej i pamięci współdzielonej.
@@ -267,17 +267,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Po wykryciu każdej fizycznej karty pytać użytkownika o połączenia/wyjścia, z podpowiedzią `on board` oraz przykładami `HDMI`, `DisplayPort` i `USB-C`.
   - Zapisywać odpowiedź bezpośrednio w polu `conn`; nie próbować automatycznie wyliczać wszystkich gniazd maszyny.
 
-- [ ] Rozszerzyć dane GPU dostępne podczas weryfikacji.
-  - Pokazywać nazwę adaptera, `PNPDeviceID`, procesor graficzny, wersję i datę sterownika.
-  - Pokazywać pamięć dedykowaną i współdzieloną jako osobne wartości diagnostyczne.
-  - [x] Odczytywać `Status` oraz `ConfigManagerErrorCode` i ostrzegać o niesprawnym urządzeniu.
-  - Bieżącą rozdzielczość i częstotliwość odświeżania wykorzystywać tylko diagnostycznie, szczególnie podczas sesji zdalnej.
-
 - [x] Przetwarzać każdy adapter graficzny niezależnie.
   - Błąd jednego adaptera nie powinien usuwać pozostałych kart graficznych z wyniku.
   - W ostrzeżeniu wskazywać nazwę albo identyfikator problematycznego urządzenia.
 
-- [ ] Ustalić docelowy format wpisu GPU w PHP.
+- [x] Ustalić docelowy format wpisu GPU w PHP.
   - Pozostawić typ `Graphic Card`.
   - [x] Dla grafiki zintegrowanej używać krótkiego opisu bez mylącej ilości pamięci, np. `Intel(R) Iris(R) Xe Graphics`.
   - Dla grafiki dedykowanej używać formatu takiego jak `4096MB NVIDIA GeForce RTX 3050`, jeśli ilość VRAM została wiarygodnie odczytana.
@@ -286,19 +280,19 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 ### Bateria
 
 - [ ] Rozszerzyć źródła danych o baterii.
-  - Pozostawić `Win32_Battery` jako podstawowe lub awaryjne źródło prostych informacji.
+  - [x] Pozostawić `Win32_Battery` jako źródło bieżącego stanu, poziomu naładowania, napięcia i awaryjnego opisu.
   - Uzupełnić dane klasami baterii z przestrzeni `root\wmi`.
-  - Rozważyć użycie `powercfg /batteryreport /xml` jako dodatkowego źródła charakterystyki i historii baterii.
-  - Korelować wpisy różnych źródeł po stabilnym identyfikatorze lub nazwie instancji, a nie pozycji na liście.
+  - [x] Używać `powercfg /batteryreport /xml` jako podstawowego źródła modelu, producenta, pojemności i liczby cykli.
+  - [x] Korelować raport `powercfg` z `Win32_Battery` po identyfikatorze/nazwie baterii; pozycję stosować tylko dla jednoznacznego zestawu zawierającego po jednym rekordzie.
 
 - [ ] Rozszerzyć dane baterii dostępne podczas weryfikacji.
-  - Odczytywać producenta, nazwę lub model, numer seryjny i rodzaj chemii ogniwa.
-  - Pokazywać pojemność projektową oraz aktualną pojemność po pełnym naładowaniu.
-  - Odczytywać liczbę cykli ładowania, jeśli sterownik i firmware ją udostępniają.
-  - Pokazywać napięcie projektowe, bieżący poziom naładowania, stan baterii oraz zgłoszone błędy.
-  - Brak pojedynczej wartości traktować jako brak danych, a nie błąd całego odczytu baterii.
+  - [x] Odczytywać i pokazywać producenta oraz nazwę lub model; numer seryjny celowo ignorować, ponieważ jest skanowany osobno z etykiety baterii.
+  - [x] Pokazywać pojemność projektową oraz aktualną pojemność po pełnym naładowaniu.
+  - [x] Odczytywać liczbę cykli ładowania, jeśli sterownik i firmware ją udostępniają; wartość `0` traktować jako brak danych.
+  - [x] Pokazywać napięcie projektowe, bieżący poziom naładowania oraz stan baterii.
+  - [x] Brak pojedynczej wartości traktować jako `brak danych`, a nie błąd całego odczytu baterii.
 
-- [ ] Obliczać i prezentować kondycję baterii.
+- [x] Obliczać i prezentować kondycję baterii.
   - Obliczać kondycję jako `FullChargeCapacity / DesignCapacity * 100%`.
   - Obliczać zużycie jako `100% - kondycja`.
   - Wykonywać obliczenia tylko wtedy, gdy obie pojemności są wiarygodne i pojemność projektowa jest większa od zera.
@@ -314,13 +308,12 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [ ] Walidować dane identyfikacyjne baterii.
   - Usuwać zbędne spacje z producenta, modelu i numeru seryjnego.
   - Odrzucać puste numery seryjne oraz typowe wartości zastępcze.
-  - Pokazywać użytkownikowi źródło danych i informację, gdy numer seryjny nie jest wiarygodny.
+  - [x] Nie wyświetlać ani nie zapisywać automatycznie wykrytego numeru seryjnego; użytkownik skanuje go bezpośrednio z baterii.
 
-- [ ] Ustalić docelowy format wpisu baterii w PHP.
+- [x] Ustalić docelowy format wpisu baterii w PHP.
   - Pozostawić typ `Battery` i prosty opis, np. `Internal Battery`.
   - Dane o pojemności, kondycji, liczbie cykli i bieżącym naładowaniu pozostawić wyłącznie w diagnostyce konsolowej.
-  - Zapisywać numer seryjny w opcjonalnym polu `sn`, jeśli został wiarygodnie odczytany.
-  - Nie dodawać pola `sn`, gdy numer jest pusty albo niewiarygodny.
+  - Pole `sn` zawsze dodawać, ale pozostawiać je puste: `'sn'=>''`.
 
 ## Priorytet wysoki
 
