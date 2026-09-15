@@ -279,7 +279,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Bateria
 
-- [ ] Rozszerzyć źródła danych o baterii.
+- [x] Rozszerzyć źródła danych o baterii.
   - [x] Pozostawić `Win32_Battery` jako źródło bieżącego stanu, poziomu naładowania, napięcia i awaryjnego opisu.
   - Uzupełnić dane klasami baterii z przestrzeni `root\wmi`.
   - [x] Używać `powercfg /batteryreport /xml` jako podstawowego źródła modelu, producenta, pojemności i liczby cykli.
@@ -299,13 +299,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Ostrzegać, gdy kondycja spadnie poniżej 80%, ale nie blokować z tego powodu zapisu inwentaryzacji.
   - Nie traktować bieżącego poziomu naładowania jako kondycji baterii.
 
-- [ ] Obsłużyć wiele baterii i urządzenia niebędące baterią laptopa.
-  - Zachować osobny wpis dla każdej fizycznej baterii w laptopach z dwoma akumulatorami.
-  - Przetwarzać każdą baterię niezależnie, aby błąd jednej nie usuwał pozostałych z wyniku.
-  - Rozpoznać i nie zapisywać przypadkowo baterii urządzenia UPS jako wewnętrznej baterii laptopa.
-  - Brak baterii pozostawić jako prawidłowy wynik dla komputera stacjonarnego.
-
-- [ ] Walidować dane identyfikacyjne baterii.
+- [x] Walidować dane identyfikacyjne baterii.
   - Usuwać zbędne spacje z producenta, modelu i numeru seryjnego.
   - Odrzucać puste numery seryjne oraz typowe wartości zastępcze.
   - [x] Nie wyświetlać ani nie zapisywać automatycznie wykrytego numeru seryjnego; użytkownik skanuje go bezpośrednio z baterii.
