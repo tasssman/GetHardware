@@ -60,6 +60,23 @@ function Read-TextValue {
     }
 }
 
+function Read-NonNegativeInteger {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [AllowNull()]$Default
+    )
+
+    while ($true) {
+        $Value = Read-TextValue -Prompt $Prompt -Default $Default
+        $Number = 0
+        if ([int]::TryParse($Value, [ref]$Number) -and $Number -ge 0) {
+            return $Number
+        }
+
+        Write-Warning 'Wpisz liczbę całkowitą równą lub większą od zera.'
+    }
+}
+
 function Test-IsoDate {
     param([Parameter(Mandatory)][string]$Value)
 
@@ -222,10 +239,175 @@ function Import-ModelDatabase {
     return $Models
 }
 
+function Write-ModelDatabase {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)]$Models
+    )
+
+    $Json = ConvertTo-Json -InputObject @($Models) -Depth 6
+    $TemporaryPath = Join-Path `
+        (Split-Path -Parent $Path) `
+        ".$([IO.Path]::GetFileName($Path)).$([guid]::NewGuid().ToString('N')).tmp"
+    $BackupPath = "$TemporaryPath.bak"
+    try {
+        Write-Utf8NoBomFile -Path $TemporaryPath -Content ($Json + [Environment]::NewLine)
+        $null = Import-ModelDatabase -Path $TemporaryPath
+        [IO.File]::Replace($TemporaryPath, $Path, $BackupPath)
+    }
+    finally {
+        foreach ($CleanupPath in @($TemporaryPath, $BackupPath)) {
+            if (Test-Path -LiteralPath $CleanupPath) {
+                Remove-Item -LiteralPath $CleanupPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+function New-ModelDatabaseEntry {
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][string]$MemorySpec,
+        [Parameter(Mandatory)][int]$PowerMaxW,
+        [Parameter(Mandatory)][int]$PowerW,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Other,
+        [Parameter(Mandatory)][string]$DeviceType
+    )
+
+    return [pscustomobject][ordered]@{
+        model             = $Model.Trim()
+        baseboardFallback = $Model.Trim()
+        memorySpec        = $MemorySpec.Trim()
+        powerMaxW         = $PowerMaxW
+        powerW            = $PowerW
+        other             = $Other.Trim()
+        deviceType        = $DeviceType.Trim().ToLowerInvariant()
+    }
+}
+
+function Add-ModelDatabaseEntry {
+    param(
+        [Parameter(Mandatory)][string]$DatabasePath,
+        [Parameter(Mandatory)][psobject]$Entry
+    )
+
+    $Models = @(Import-ModelDatabase -Path $DatabasePath)
+    $Matches = @($Models | Where-Object { ([string]$_.model).Trim() -ieq ([string]$Entry.model).Trim() })
+    if ($Matches.Count -gt 0) {
+        throw "Nie można dodać modelu '$($Entry.model)', ponieważ jest już obecny w bazie."
+    }
+
+    $UpdatedModels = @($Models) + @($Entry)
+    Write-ModelDatabase -Path $DatabasePath -Models $UpdatedModels
+    $VerifiedModels = @(Import-ModelDatabase -Path $DatabasePath)
+    $VerifiedMatches = @($VerifiedModels | Where-Object { ([string]$_.model).Trim() -ieq ([string]$Entry.model).Trim() })
+    if ($VerifiedMatches.Count -ne 1) {
+        throw "Nie udało się zweryfikować zapisu modelu '$($Entry.model)' w bazie."
+    }
+    return $VerifiedMatches[0]
+}
+
+function Read-DeviceTypeForNewModel {
+    param([AllowNull()][string]$DetectedDeviceType)
+
+    $Detected = ([string]$DetectedDeviceType).Trim().ToLowerInvariant()
+    if ($Detected -in @('laptop', 'tablet', 'desktop', 'server', 'storage')) {
+        return $Detected
+    }
+
+    Write-Warning 'Nie udało się jednoznacznie wykryć typu urządzenia z obudowy SMBIOS.'
+    Write-Host '[1] laptop'
+    Write-Host '[2] tablet'
+    Write-Host '[3] desktop'
+    Write-Host '[4] server'
+    Write-Host '[5] storage'
+    $Choice = Read-MenuChoice -Prompt 'Wybierz typ urządzenia [1-5]' -Minimum 1 -Maximum 5
+    return @('laptop', 'tablet', 'desktop', 'server', 'storage')[$Choice - 1]
+}
+
+function Read-MemorySpecForNewModel {
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [AllowNull()][psobject]$MemoryInventory
+    )
+
+    $DetectedSpec = ''
+    if ($null -ne $MemoryInventory -and [bool]$MemoryInventory.SpecReliable) {
+        $DetectedSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($DetectedSpec)) {
+        Write-Warning 'Nie udało się jednoznacznie wykryć typu, szybkości i konfiguracji pamięci.'
+        return Read-CompleteMemorySpec -Model $Model -DetectedSpec $null
+    }
+
+    Write-Host "Wykryta konfiguracja pamięci: $DetectedSpec" -ForegroundColor Green
+    Write-Host 'Maksimum podawane przez SMBIOS nie jest używane, ponieważ może być limitem kontrolera, a nie konkretnego modelu.' -ForegroundColor DarkGray
+    while ($true) {
+        $Maximum = Read-TextValue -Prompt 'Maksymalna obsługiwana pamięć w GB (sprawdź w dokumentacji producenta)' -Default $null
+        $NormalizedMaximum = $Maximum.Replace(',', '.')
+        $ParsedMaximum = 0.0
+        if ($NormalizedMaximum -match '^\d+(?:\.\d+)?$' -and
+            [double]::TryParse($NormalizedMaximum, [Globalization.NumberStyles]::AllowDecimalPoint, [Globalization.CultureInfo]::InvariantCulture, [ref]$ParsedMaximum) -and
+            $ParsedMaximum -gt 0) {
+            return "$DetectedSpec, max${NormalizedMaximum}GB"
+        }
+        Write-Warning 'Podaj dodatnią pojemność w GB, np. 64.'
+    }
+}
+
+function Read-NewModelDatabaseEntry {
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [AllowNull()][psobject]$MemoryInventory,
+        [AllowNull()][string]$DetectedDeviceType
+    )
+
+    Write-Section -Title 'Nowy model w bazie'
+    Write-Host "Model:               $Model"
+    Write-Host "Awaryjny opis płyty: $Model"
+    $MemorySpecDefault = Read-MemorySpecForNewModel -Model $Model -MemoryInventory $MemoryInventory
+    $DeviceTypeDefault = Read-DeviceTypeForNewModel -DetectedDeviceType $DetectedDeviceType
+    Write-Host "Typ urządzenia:      $DeviceTypeDefault" -ForegroundColor Green
+    $PowerMaxDefault = $null
+    $PowerDefault = $null
+    $OtherDefault = ''
+
+    while ($true) {
+        $PowerMax = Read-NonNegativeInteger -Prompt 'Maksymalna moc zasilacza — powerMaxW [W]' -Default $PowerMaxDefault
+        $Power = Read-NonNegativeInteger -Prompt 'Pobór mocy — powerW [W]' -Default $PowerDefault
+        $Other = Read-TextValue -Prompt 'Dodatkowe informacje — other' -Default $OtherDefault -AllowEmpty
+        $Entry = New-ModelDatabaseEntry `
+            -Model $Model `
+            -MemorySpec $MemorySpecDefault `
+            -PowerMaxW $PowerMax `
+            -PowerW $Power `
+            -Other $Other `
+            -DeviceType $DeviceTypeDefault
+
+        Write-Section -Title 'Podsumowanie nowego modelu'
+        Write-Host (ConvertTo-Json -InputObject $Entry -Depth 4)
+        Write-Host '[1] Zapisz wpis w hardware-models.json'
+        Write-Host '[2] Popraw wartości ręczne'
+        Write-Host '[3] Anuluj'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-3]' -Minimum 1 -Maximum 3
+        if ($Choice -eq 1) { return $Entry }
+        if ($Choice -eq 3) {
+            throw [OperationCanceledException]::new('Anulowano dodawanie nowego modelu.')
+        }
+
+        $PowerMaxDefault = $PowerMax
+        $PowerDefault = $Power
+        $OtherDefault = $Other
+    }
+}
+
 function Wait-ForKnownModel {
     param(
         [Parameter(Mandatory)][string]$Model,
-        [Parameter(Mandatory)][string]$DatabasePath
+        [Parameter(Mandatory)][string]$DatabasePath,
+        [AllowNull()][psobject]$MemoryInventory,
+        [AllowNull()][string]$DetectedDeviceType
     )
 
     while ($true) {
@@ -236,9 +418,17 @@ function Wait-ForKnownModel {
                 return $Matches[0]
             }
 
-            Write-Warning "Modelu '$Model' nie ma w bazie. Dopisz go ręcznie do: $DatabasePath"
+            Write-Warning "Modelu '$Model' nie ma w bazie."
+            $NewEntry = Read-NewModelDatabaseEntry `
+                -Model $Model `
+                -MemoryInventory $MemoryInventory `
+                -DetectedDeviceType $DetectedDeviceType
+            $SavedEntry = Add-ModelDatabaseEntry -DatabasePath $DatabasePath -Entry $NewEntry
+            Write-Host "Dodano model '$Model' do hardware-models.json." -ForegroundColor Green
+            return $SavedEntry
         }
         catch {
+            if ($_.Exception -is [OperationCanceledException]) { throw }
             Write-Warning $_.Exception.Message
         }
 
@@ -2059,24 +2249,7 @@ function Set-ModelMemorySpec {
         throw "Nie można zaktualizować memorySpec: model '$Model' nie występuje w bazie dokładnie jeden raz."
     }
     $Matches[0].memorySpec = $MemorySpec.Trim()
-
-    $Json = ConvertTo-Json -InputObject $Models -Depth 6
-    $TemporaryPath = Join-Path `
-        (Split-Path -Parent $DatabasePath) `
-        ".$([IO.Path]::GetFileName($DatabasePath)).$([guid]::NewGuid().ToString('N')).tmp"
-    $BackupPath = "$TemporaryPath.bak"
-    try {
-        Write-Utf8NoBomFile -Path $TemporaryPath -Content ($Json + [Environment]::NewLine)
-        $null = Import-ModelDatabase -Path $TemporaryPath
-        [IO.File]::Replace($TemporaryPath, $DatabasePath, $BackupPath)
-    }
-    finally {
-        foreach ($CleanupPath in @($TemporaryPath, $BackupPath)) {
-            if (Test-Path -LiteralPath $CleanupPath) {
-                Remove-Item -LiteralPath $CleanupPath -Force -ErrorAction SilentlyContinue
-            }
-        }
-    }
+    Write-ModelDatabase -Path $DatabasePath -Models $Models
     Write-Host "Zaktualizowano memorySpec dla modelu '$Model' w hardware-models.json." -ForegroundColor Green
 }
 
@@ -2856,12 +3029,16 @@ function Invoke-HardwareInventory {
 
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
     Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
-    $ModelEntry = Wait-ForKnownModel -Model $System.Model -DatabasePath $ModelDatabasePath
+    $MemoryInventory = Get-MemoryInventory
+    $ModelEntry = Wait-ForKnownModel `
+        -Model $System.Model `
+        -DatabasePath $ModelDatabasePath `
+        -MemoryInventory $MemoryInventory `
+        -DetectedDeviceType $System.DetectedDeviceType
     $ResolvedDeviceType = Resolve-DeviceType `
         -DatabaseDeviceType ([string]$ModelEntry.deviceType) `
         -DetectedDeviceType $System.DetectedDeviceType `
         -ChassisDescription $System.ChassisDescription
-    $MemoryInventory = Get-MemoryInventory
     $MemorySpec = Resolve-MemorySpec `
         -ModelEntry $ModelEntry `
         -MemoryInventory $MemoryInventory `

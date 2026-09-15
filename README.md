@@ -29,7 +29,7 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 6. Wprowadzenie gwarancji, ceny, etykiety Windows, pomieszczenia i notatki.
 7. Wyświetlenie podsumowania i zapis po zatwierdzeniu.
 
-Nieznany model zatrzymuje przebieg. Po ręcznym dodaniu modelu do JSON-u można nacisnąć Enter, aby skrypt ponownie wczytał bazę bez rozpoczynania pracy od początku.
+Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 
 ## Pliki wynikowe
 
@@ -70,6 +70,8 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie.
 
 Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy użytkownik może użyć wartości wykrytej, zachować wartość z bazy albo wpisać własną. Aktualizacja `memorySpec` w JSON-ie następuje tylko po jednoznacznym wyborze użytkownika i jest wykonywana przez zweryfikowany plik tymczasowy.
+
+Przy dodawaniu nieznanego modelu `baseboardFallback` otrzymuje nazwę komputera, a `deviceType` jest pobierany z jednoznacznego wyniku `Win32_SystemEnclosure.ChassisTypes`. Jeśli typu nie można ustalić, skrypt prosi o jego wybór. Maksymalna pojemność w `memorySpec` zawsze wymaga ręcznego potwierdzenia na podstawie dokumentacji producenta; wartość `MaxCapacity`/`MaxCapacityEx` z SMBIOS nie jest używana jako limit konkretnego modelu.
 
 Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on board'` i poprawnym numerem seryjnym. Rekordy pamięci lutowanej są grupowane w jeden wpis z `conn'=>'soldered'`. Wartości zastępcze, takie jak `00000000`, nie trafiają do `sn`.
 

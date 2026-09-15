@@ -23,8 +23,9 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 - Dane modeli będą oddzielone od logiki skryptu i zapisane w pliku `hardware-models.json`.
 - Skrypt wczytuje oraz waliduje bazę i nigdy nie zmienia jej bez decyzji użytkownika.
 - Wyjątkiem jest interaktywnie zatwierdzona aktualizacja pola `memorySpec`: przy różnicy między SMBIOS i JSON-em użytkownik może zapisać wykrytą albo własną wartość w bazie.
-- Jeśli wykrytego modelu nie ma w bazie, skrypt zatrzymuje dalsze przetwarzanie i prosi o ręczne dopisanie modelu do `hardware-models.json`.
-- Po potwierdzeniu przez użytkownika skrypt ponownie wczytuje bazę i kontynuuje dopiero wtedy, gdy model został poprawnie dodany.
+- Jeśli wykrytego modelu nie ma w bazie, skrypt uruchamia interaktywny kreator wpisu i nie przechodzi do dalszego przetwarzania przed jego zatwierdzeniem.
+- Nazwa modelu, `baseboardFallback`, wykryta część `memorySpec` oraz jednoznaczny `deviceType` są uzupełniane automatycznie. Użytkownik podaje zweryfikowane maksimum pamięci, `powerMaxW`, `powerW` i `other`.
+- Skrypt pokazuje kompletny wpis przed zapisem, zmienia bazę wyłącznie po zatwierdzeniu, ponownie ją waliduje i następnie kontynuuje bieżący spis.
 
 ## Spisy i pliki wynikowe
 

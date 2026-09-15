@@ -546,6 +546,25 @@ try {
     Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'Updating memorySpec should never replace the verified maximum with SMBIOS MaxCapacityEx.'
     Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
+    $script:MockReadHostQueue.Enqueue('64')
+    $script:MockReadHostQueue.Enqueue('130')
+    $script:MockReadHostQueue.Enqueue('65')
+    $script:MockReadHostQueue.Enqueue('zasilacz USB-C')
+    $script:MockReadHostQueue.Enqueue('1')
+    $NewModel = Wait-ForKnownModel `
+        -Model 'Latitude TEST AUTO' `
+        -DatabasePath $TestModelDatabase `
+        -MemoryInventory $SlotMemory `
+        -DetectedDeviceType 'laptop'
+    Assert-True -Condition ($NewModel.model -eq 'Latitude TEST AUTO') -Message 'An unknown model should be added without manual JSON editing.'
+    Assert-True -Condition ($NewModel.baseboardFallback -eq 'Latitude TEST AUTO') -Message 'A new model should use its model name as baseboardFallback.'
+    Assert-True -Condition ($NewModel.memorySpec -eq 'DDR4 3200MHz x4, max64GB') -Message 'A new model should combine detected memory data with a manually verified maximum.'
+    Assert-True -Condition ($NewModel.powerMaxW -eq 130 -and $NewModel.powerW -eq 65) -Message 'A new model should store manually entered power values.'
+    Assert-True -Condition ($NewModel.other -eq 'zasilacz USB-C') -Message 'A new model should store manually entered additional information.'
+    Assert-True -Condition ($NewModel.deviceType -eq 'laptop') -Message 'A new model should store the detected device type.'
+    $ModelsAfterAutomaticAddition = @(Import-ModelDatabase -Path $TestModelDatabase)
+    Assert-True -Condition ($ModelsAfterAutomaticAddition.Count -eq ($Models.Count + 1)) -Message 'Adding an unknown model should append exactly one database entry.'
+
     $ExistingTestCollection = [pscustomobject]@{
         Name  = $TestCollection.Name
         Path  = $TestCollection.Path

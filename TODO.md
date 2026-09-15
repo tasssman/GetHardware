@@ -341,21 +341,16 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Warunek `PCSystemType -eq 2` może pominąć tablety i urządzenia konwertowalne.
   - Zweryfikować wartości `PCSystemType`/`PCSystemTypeEx` i sposób dodawania sufiksu `_laptop`.
 
-- [ ] Poprawić zbieranie danych o podzespołach.
-  - Nie oznaczać każdego dysku jako `M.2`; wykorzystać rzeczywisty typ magistrali/interfejsu.
-  - Pamięć lutowaną oznaczać jako `soldered`, a zgodnie z wymaganiem importu każdy moduł niewlutowany jako `on board`.
-  - Nie przypisywać każdej karcie graficznej połączenia `on board,HDMI`.
-  - Odfiltrować Bluetooth, WAN i inne adaptery, jeśli nie powinny być rejestrowane jako karty sieciowe.
-  - Zweryfikować wiarygodność `AdapterRAM` dla współczesnych kart graficznych.
-  - Dla komputerów wieloprocesorowych prawidłowo zsumować lub opisać rdzenie.
-
 - [x] Usunąć sztuczne pomniejszanie `MaxClockSpeed` o 1 MHz.
   - Ustalić, czy było to obejście konkretnego problemu z formatem danych.
 
 - [ ] Zweryfikować ręczną tabelę modeli.
   - Sprawdzić parametry płyty głównej, pamięci, zasilacza i poboru mocy.
   - Szczególnie przejrzeć wpisy wyglądające na skopiowane pomiędzy różnymi modelami.
-  - [ ] Obsłużyć sytuację, gdy wykrytego modelu laptopa nie ma w pliku `hardware-models.json`.
+  - [x] Obsłużyć sytuację, gdy wykrytego modelu laptopa nie ma w pliku `hardware-models.json`.
+    - Automatycznie uzupełniać `model`, `baseboardFallback`, wykrytą część `memorySpec` oraz jednoznaczny `deviceType`.
+    - Pytać o zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` i `other`.
+    - Przed zapisem pokazywać kompletny wpis i wymagać jego zatwierdzenia.
   - [x] Przenieść tabelę do osobnego pliku JSON, aby łatwiej ją utrzymywać.
 
 ## Priorytet niższy / porządki
