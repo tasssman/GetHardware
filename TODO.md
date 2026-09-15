@@ -365,8 +365,9 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Adres pokazywać również w konsoli; błąd uruchomienia przeglądarki nie przerywa inwentaryzacji.
   - Strony oraz komentarza w PHP nie generować dla urządzeń innych producentów.
 
-- [ ] Umożliwić wpisanie dowolnej etykiety systemu.
+- [x] Umożliwić wpisanie dowolnej etykiety systemu.
   - Oprócz wyboru `W10P` lub `W11P` pozwolić użytkownikowi podać inną wartość etykiety.
+  - Własna etykieta nie może być pusta; przy ponownej edycji aktualna wartość jest podpowiedzią.
 
 - [ ] Ujednolicić podpowiedzi i wartości domyślne w polach formularza.
   - Wartość pokazana jako podpowiedź, np. dla pola pomieszczenia, powinna być faktyczną wartością domyślną zatwierdzaną klawiszem Enter.

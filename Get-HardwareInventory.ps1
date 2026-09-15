@@ -161,14 +161,19 @@ function Read-Price {
 function Read-LicenseLabel {
     param([AllowNull()][string]$Current)
 
+    Write-Section -Title 'Etykieta systemu'
     Write-Host '[1] W10P'
     Write-Host '[2] W11P'
+    Write-Host '[3] Wpisz inną etykietę'
     if (-not [string]::IsNullOrWhiteSpace($Current)) {
         Write-Host "Aktualna wartość: $Current" -ForegroundColor DarkGray
     }
-    $Choice = Read-MenuChoice -Prompt 'Wybierz etykietę systemu [1/2]' -Minimum 1 -Maximum 2
+    $Choice = Read-MenuChoice -Prompt 'Wybierz etykietę systemu [1-3]' -Minimum 1 -Maximum 3
     if ($Choice -eq 1) { return 'W10P' }
-    return 'W11P'
+    if ($Choice -eq 2) { return 'W11P' }
+
+    $CustomDefault = if ([string]::IsNullOrWhiteSpace($Current)) { $null } else { $Current.Trim() }
+    return Read-TextValue -Prompt 'Podaj własną etykietę systemu' -Default $CustomDefault
 }
 
 function Read-ManualData {

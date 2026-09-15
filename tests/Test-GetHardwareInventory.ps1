@@ -418,6 +418,17 @@ catch [OperationCanceledException] {
 }
 Assert-True -Condition $EnvironmentCancellationDetected -Message 'The preparation screen should allow cancellation before hardware collection starts.'
 
+$script:MockReadHostQueue.Enqueue('1')
+Assert-True -Condition ((Read-LicenseLabel -Current $null) -eq 'W10P') -Message 'The predefined W10P label should remain available.'
+$script:MockReadHostQueue.Enqueue('2')
+Assert-True -Condition ((Read-LicenseLabel -Current $null) -eq 'W11P') -Message 'The predefined W11P label should remain available.'
+$script:MockReadHostQueue.Enqueue('3')
+$script:MockReadHostQueue.Enqueue('Linux')
+Assert-True -Condition ((Read-LicenseLabel -Current $null) -eq 'Linux') -Message 'The user should be able to enter a custom system label.'
+$script:MockReadHostQueue.Enqueue('3')
+$script:MockReadHostQueue.Enqueue('')
+Assert-True -Condition ((Read-LicenseLabel -Current 'W11H') -eq 'W11H') -Message 'The current custom label should be accepted with Enter during editing.'
+
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'laptop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'Matching device types should be accepted without a question.'
 $script:MockReadHostQueue.Enqueue('2')
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'desktop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'The user should be able to use the detected type for the current device.'

@@ -82,7 +82,7 @@ Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on b
 - `bought`: `YYYY-MM-DD`, wspólne dla całego spisu;
 - `warr`: `YYYY-MM-DD+N`, np. `2021-05-20+3`;
 - `cenan`: kwota PLN z dwiema cyframi po przecinku, np. `1414,08`;
-- `label`: interaktywny wybór `W10P` lub `W11P`;
+- `label`: interaktywny wybór `W10P`, `W11P` albo wpisanie dowolnej niepustej etykiety;
 - `room`: domyślnie `A216`;
 - `note`: domyślny szablon `SCC:;REFURBISHED;`.
 
