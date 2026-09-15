@@ -492,6 +492,45 @@ function Resolve-ServiceTag {
     }
 }
 
+function Get-DellSupportUrl {
+    param(
+        [AllowNull()][string]$Manufacturer,
+        [Parameter(Mandatory)][string]$ServiceTag
+    )
+
+    if (([string]$Manufacturer).Trim() -notmatch '(?i)\bDell\b') {
+        return ''
+    }
+    if (-not (Test-ServiceTag -Value $ServiceTag)) {
+        return ''
+    }
+
+    $EncodedServiceTag = [Uri]::EscapeDataString($ServiceTag.Trim().ToUpperInvariant())
+    return "https://www.dell.com/support/home/en-us/product-support/servicetag/$EncodedServiceTag/overview"
+}
+
+function Open-DellSupportPage {
+    param(
+        [AllowNull()][string]$Manufacturer,
+        [Parameter(Mandatory)][string]$ServiceTag
+    )
+
+    $Url = Get-DellSupportUrl -Manufacturer $Manufacturer -ServiceTag $ServiceTag
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return
+    }
+
+    Write-Section -Title 'Wsparcie Dell'
+    Write-Host "Strona urządzenia: $Url"
+    try {
+        Start-Process -FilePath $Url -ErrorAction Stop
+        Write-Host 'Otwarto stronę w domyślnej przeglądarce.' -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Nie udało się otworzyć domyślnej przeglądarki. Skopiuj powyższy adres ręcznie. Szczegóły: $($_.Exception.Message)"
+    }
+}
+
 function Get-ProcessorClockSpeedMhz {
     param([Parameter(Mandatory)][object[]]$Processors)
 
@@ -2878,7 +2917,10 @@ function New-PhpRecordBody {
     $IdentifierSuffix = if ($Inventory.DeviceType -in @('laptop', 'tablet')) { '_laptop' } else { '' }
     $Identifier = ConvertTo-PhpSingleQuotedValue "$($Inventory.ServiceTag)$IdentifierSuffix"
     $Lines.Add("addComp('$Identifier',`$C,`$partsLapt);")
-    $Lines.Add("#https://www.dell.com/support/home/en-us/product-support/servicetag/$($Inventory.ServiceTag)/overview")
+    $SupportUrl = Get-DellSupportUrl -Manufacturer $Inventory.Manufacturer -ServiceTag $Inventory.ServiceTag
+    if (-not [string]::IsNullOrWhiteSpace($SupportUrl)) {
+        $Lines.Add("#$SupportUrl")
+    }
     return ($Lines -join "`r`n")
 }
 
@@ -3051,6 +3093,7 @@ function Invoke-HardwareInventory {
     }
 
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
+    Open-DellSupportPage -Manufacturer $System.Manufacturer -ServiceTag $ServiceTag
     Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
     $MemoryInventory = Get-MemoryInventory
     $ModelEntry = Wait-ForKnownModel `

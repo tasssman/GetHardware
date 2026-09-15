@@ -360,8 +360,10 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   2. Przed rozpoczęciem inwentaryzacji należy odłączyć urządzenia USB, w szczególności zewnętrzne karty sieciowe, karty dźwiękowe, dyski, pendrive'y i stacje dokujące.
   3. Dalszy odczyt rozpoczyna się dopiero po potwierdzeniu przygotowania sprzętu; użytkownik może bezpiecznie anulować działanie.
 
-- [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
+- [x] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.
+  - Adres pokazywać również w konsoli; błąd uruchomienia przeglądarki nie przerywa inwentaryzacji.
+  - Strony oraz komentarza w PHP nie generować dla urządzeń innych producentów.
 
 - [ ] Umożliwić wpisanie dowolnej etykiety systemu.
   - Oprócz wyboru `W10P` lub `W11P` pozwolić użytkownikowi podać inną wartość etykiety.

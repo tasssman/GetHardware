@@ -23,6 +23,9 @@ Assert-True -Condition (Test-IsoDate -Value '2025-05-28') -Message 'A valid ISO 
 Assert-True -Condition (-not (Test-IsoDate -Value '2025-02-30')) -Message 'An invalid calendar date should fail.'
 Assert-True -Condition (Test-ServiceTag -Value '13QJ7D3') -Message 'A Dell Service Tag should pass.'
 Assert-True -Condition (-not (Test-ServiceTag -Value 'To be filled by O.E.M.')) -Message 'A BIOS placeholder should fail.'
+$DellSupportUrl = Get-DellSupportUrl -Manufacturer 'Dell Inc.' -ServiceTag '13qj7d3'
+Assert-True -Condition ($DellSupportUrl -eq 'https://www.dell.com/support/home/en-us/product-support/servicetag/13QJ7D3/overview') -Message 'A Dell device should receive a normalized support URL.'
+Assert-True -Condition ([string]::IsNullOrWhiteSpace((Get-DellSupportUrl -Manufacturer 'Lenovo' -ServiceTag '13QJ7D3'))) -Message 'A non-Dell device should not receive a Dell support URL.'
 
 # Regression test for Windows PowerShell 5.1: @($list) fails for a generic
 # List[object] containing PSCustomObject, so production code must use ToArray().
@@ -500,6 +503,11 @@ Assert-True -Condition ($Body.Contains("Intel test\'s CPU")) -Message 'Apostroph
 Assert-True -Condition ($Body.Contains(",'mhz'=>3000")) -Message 'The resolved processor frequency should be written to mhz.'
 Assert-True -Condition ($Body.Contains("'sn'=>'D03C1FD5C7D0'")) -Message 'Optional component serial numbers should be rendered.'
 Assert-True -Condition ($Body.Contains("array('pt'=>'Battery', 'desc'=>'Internal Battery', 'conn'=>'', 'sn'=>'');")) -Message 'A battery should always contain an explicitly empty sn field.'
+Assert-True -Condition ($Body.Contains('#https://www.dell.com/support/home/en-us/product-support/servicetag/13QJ7D3/overview')) -Message 'A Dell PHP record should contain its support URL.'
+$NonDellInventory = $Inventory.PSObject.Copy()
+$NonDellInventory.Manufacturer = 'Lenovo'
+$NonDellBody = New-PhpRecordBody -Inventory $NonDellInventory -Parts $Parts
+Assert-True -Condition (-not $NonDellBody.Contains('dell.com/support')) -Message 'A non-Dell PHP record should not contain a Dell support URL.'
 
 $DevicePhp = New-DevicePhp -Body $Body
 Assert-True -Condition ($DevicePhp.StartsWith("<?php`r`n")) -Message 'A device file should start with a PHP opening tag.'

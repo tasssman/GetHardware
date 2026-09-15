@@ -18,6 +18,8 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 - Na początku pracy z urządzeniem skrypt automatycznie odczytuje Service Tag/numer seryjny z BIOS-u.
 - Jeśli odczyt się nie powiedzie albo zwróci pustą lub niewiarygodną wartość, skrypt zgłasza problem i dopiero wtedy prosi użytkownika o ręczne podanie identyfikatora.
 - Przed użyciem automatycznie odczytany lub ręcznie podany identyfikator jest normalizowany i walidowany.
+- Po ustaleniu Service Tagu urządzenia Dell skrypt pokazuje adres jego strony wsparcia i otwiera ją w domyślnej przeglądarce. Nieudane otwarcie nie zatrzymuje inwentaryzacji.
+- Strona wsparcia Dell ani jej komentarz w PHP nie są generowane dla urządzeń innych producentów.
 
 ## Baza modeli
 

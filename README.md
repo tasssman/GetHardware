@@ -23,12 +23,13 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 1. Potwierdzenie odłączenia dodatkowych monitorów, sesji pulpitu zdalnego, stacji dokujących i zewnętrznych urządzeń USB.
 2. Odczyt modelu, Service Tagu, procesora, płyty głównej i pozostałych podzespołów.
-3. Sprawdzenie modelu w `hardware-models.json`.
-4. Wybór istniejącego spisu albo utworzenie nowego.
-5. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
-6. Przegląd, edycja, dodawanie lub usuwanie wykrytych podzespołów.
-7. Wprowadzenie gwarancji, ceny, etykiety Windows, pomieszczenia i notatki.
-8. Wyświetlenie podsumowania i zapis po zatwierdzeniu.
+3. Dla urządzenia Dell wyświetlenie adresu strony wsparcia i otwarcie jej w domyślnej przeglądarce.
+4. Sprawdzenie modelu w `hardware-models.json`.
+5. Wybór istniejącego spisu albo utworzenie nowego.
+6. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
+7. Przegląd, edycja, dodawanie lub usuwanie wykrytych podzespołów.
+8. Wprowadzenie gwarancji, ceny, etykiety Windows, pomieszczenia i notatki.
+9. Wyświetlenie podsumowania i zapis po zatwierdzeniu.
 
 Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 
