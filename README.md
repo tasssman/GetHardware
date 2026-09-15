@@ -2,6 +2,8 @@
 
 Interaktywny skrypt Windows PowerShell 5.1 odczytujący informacje o sprzęcie i zapisujący je w plikach PHP przeznaczonych do importu do istniejącej bazy.
 
+Aktualna wersja skryptu: `v1.0.0`. Numer wersji jest wyświetlany jako pierwszy komunikat po uruchomieniu. Nazwa pliku pozostaje stała niezależnie od wersji.
+
 ## Wymagania
 
 - Windows PowerShell 5.1;

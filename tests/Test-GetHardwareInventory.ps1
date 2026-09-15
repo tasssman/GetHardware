@@ -4,6 +4,10 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
+if ($ScriptVersion -ne 'v1.0.0') {
+    throw 'Assertion failed: The script version should be v1.0.0.'
+}
+
 function Assert-True {
     param(
         [Parameter(Mandatory)][bool]$Condition,

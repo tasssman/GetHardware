@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$ScriptVersion = 'v1.0.0'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
@@ -3092,6 +3093,7 @@ function Show-InventorySummary {
 }
 
 function Invoke-HardwareInventory {
+    Write-Host "GetHardware — $ScriptVersion" -ForegroundColor Cyan
     Confirm-InventoryEnvironment
     $System = Get-SystemOverview
     if ([string]::IsNullOrWhiteSpace($System.Model)) {
