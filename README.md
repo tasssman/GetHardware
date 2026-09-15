@@ -11,11 +11,27 @@ Interaktywny skrypt Windows PowerShell 5.1 odczytujący informacje o sprzęcie i
 
 ## Uruchomienie
 
-Otwórz Windows PowerShell w katalogu projektu i uruchom:
+Na inwentaryzowanym laptopie otwórz Windows PowerShell i przejdź do katalogu skryptu na udziale sieciowym:
+
+```powershell
+Set-Location -LiteralPath '\\ntshare\helpdesk\scripts\GetHardware'
+```
+
+Następnie uruchom skrypt z tego katalogu:
 
 ```powershell
 .\Get-HardwareInventory.ps1
 ```
+
+Jeżeli wykonywanie skryptów PowerShell jest wyłączone na laptopie, uruchom skrypt jednorazowo z pominięciem polityki wykonywania:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\ntshare\helpdesk\scripts\GetHardware\Get-HardwareInventory.ps1'
+```
+
+Parametr `-ExecutionPolicy Bypass` dotyczy tylko uruchomionego w ten sposób procesu PowerShell i nie zmienia trwale ustawień komputera.
+
+Skrypt korzysta z plików znajdujących się na udziale sieciowym, a wyniki zapisuje w katalogu `\\ntshare\helpdesk\scripts\GetHardware\output`.
 
 Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu prosi o jej wpisanie. Przy kolejnych uruchomieniach wyświetla istniejące spisy i opcję utworzenia nowego.
 
