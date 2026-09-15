@@ -398,13 +398,26 @@ Assert-True -Condition ($DetectedMainboard -eq "Dell Inc. 0FFCXR A00 ($($TestMod
 
 $script:MockReadHostValue = ''
 $script:MockReadHostQueue = New-Object System.Collections.Generic.Queue[string]
+$script:MockReadHostPrompts = New-Object System.Collections.Generic.List[string]
 function Read-Host {
     param([string]$Prompt)
+    $script:MockReadHostPrompts.Add([string]$Prompt)
     if ($script:MockReadHostQueue.Count -gt 0) {
         return $script:MockReadHostQueue.Dequeue()
     }
     return $script:MockReadHostValue
 }
+
+$script:MockReadHostQueue.Enqueue('')
+Assert-True -Condition ((Read-TextValue -Prompt 'Pomieszczenie' -Default 'A216') -eq 'A216') -Message 'Enter should accept the displayed room default.'
+Assert-True -Condition ($script:MockReadHostPrompts[$script:MockReadHostPrompts.Count - 1] -eq 'Pomieszczenie [A216]') -Message 'A non-empty default should be displayed in square brackets.'
+$script:MockReadHostQueue.Enqueue('')
+Assert-True -Condition ((Read-TextValue -Prompt 'Pole (opcjonalnie)' -Default '' -AllowEmpty) -eq '') -Message 'Enter should leave an optional field empty.'
+Assert-True -Condition ($script:MockReadHostPrompts[$script:MockReadHostPrompts.Count - 1] -eq 'Pole (opcjonalnie)') -Message 'An empty default should not be displayed as empty square brackets.'
+$script:MockReadHostQueue.Enqueue('')
+Assert-True -Condition ((Read-TextValue -Prompt 'Notatka' -Default 'SCC:;REFURBISHED;') -eq 'SCC:;REFURBISHED;') -Message 'Enter should accept the displayed note template.'
+$script:MockReadHostQueue.Enqueue('')
+Assert-True -Condition ((Read-TextValue -Prompt 'Format dysku' -Default 'M.2') -eq 'M.2') -Message 'Enter should accept a detected disk form factor.'
 
 $script:MockReadHostQueue.Enqueue('1')
 Confirm-InventoryEnvironment

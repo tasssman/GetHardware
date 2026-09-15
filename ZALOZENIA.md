@@ -14,6 +14,7 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
   - ponawianie pytania po podaniu nieprawidłowej wartości;
   - potwierdzenia `Y/N` dla istotnych decyzji;
   - czytelne komunikaty, ostrzeżenia i możliwość anulowania bez zapisania niepełnych danych.
+- Wartości w nawiasach kwadratowych są faktycznymi wartościami domyślnymi zatwierdzanymi Enterem; przykłady są oznaczane przez `np.`, a pola dopuszczające pustą wartość jako opcjonalne.
 - Nazwa spisu nie jest przekazywana jako parametr skryptu.
 - Na początku pracy z urządzeniem skrypt automatycznie odczytuje Service Tag/numer seryjny z BIOS-u.
 - Jeśli odczyt się nie powiedzie albo zwróci pustą lub niewiarygodną wartość, skrypt zgłasza problem i dopiero wtedy prosi użytkownika o ręczne podanie identyfikatora.

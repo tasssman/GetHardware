@@ -66,8 +66,9 @@ function Read-TextValue {
 
     while ($true) {
         $DisplayPrompt = $Prompt
-        if ($null -ne $Default) {
-            $DisplayPrompt += " [$Default]"
+        $DefaultText = if ($null -eq $Default) { '' } else { [string]$Default }
+        if (-not [string]::IsNullOrWhiteSpace($DefaultText)) {
+            $DisplayPrompt += " [$DefaultText]"
         }
 
         $Value = (Read-Host $DisplayPrompt).Trim()
@@ -403,7 +404,7 @@ function Read-NewModelDatabaseEntry {
     while ($true) {
         $PowerMax = Read-NonNegativeInteger -Prompt 'Maksymalna moc zasilacza — powerMaxW [W]' -Default $PowerMaxDefault
         $Power = Read-NonNegativeInteger -Prompt 'Pobór mocy — powerW [W]' -Default $PowerDefault
-        $Other = Read-TextValue -Prompt 'Dodatkowe informacje — other' -Default $OtherDefault -AllowEmpty
+        $Other = Read-TextValue -Prompt 'Dodatkowe informacje — other (opcjonalnie)' -Default $OtherDefault -AllowEmpty
         $Entry = New-ModelDatabaseEntry `
             -Model $Model `
             -MemorySpec $MemorySpecDefault `
@@ -2707,7 +2708,7 @@ function Read-HardwarePart {
 
     $Type = Read-TextValue -Prompt 'Typ podzespołu' -Default $TypeDefault
     $Description = Read-TextValue -Prompt 'Opis' -Default $DescriptionDefault
-    $Connection = Read-TextValue -Prompt 'Połączenie' -Default $ConnectionDefault -AllowEmpty
+    $Connection = Read-TextValue -Prompt 'Połączenie (opcjonalnie)' -Default $ConnectionDefault -AllowEmpty
     $Serial = Read-TextValue -Prompt 'SN/MAC (opcjonalnie)' -Default $SerialDefault -AllowEmpty
     return New-HardwarePart -Type $Type -Description $Description -Connection $Connection -SerialNumber $Serial
 }

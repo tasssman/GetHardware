@@ -369,8 +369,10 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Oprócz wyboru `W10P` lub `W11P` pozwolić użytkownikowi podać inną wartość etykiety.
   - Własna etykieta nie może być pusta; przy ponownej edycji aktualna wartość jest podpowiedzią.
 
-- [ ] Ujednolicić podpowiedzi i wartości domyślne w polach formularza.
+- [x] Ujednolicić podpowiedzi i wartości domyślne w polach formularza.
   - Wartość pokazana jako podpowiedź, np. dla pola pomieszczenia, powinna być faktyczną wartością domyślną zatwierdzaną klawiszem Enter.
+  - Nawiasy kwadratowe `[wartość]` oznaczają faktyczną, niepustą wartość domyślną, a `(np. wartość)` jedynie przykład.
+  - Puste pola nie pokazują mylącego `[]` i są oznaczane jako opcjonalne.
 
 - [x] Uporządkować pola wymagające ręcznego uzupełnienia.
   - Data zakupu jest wpisana na stałe dla całego uruchomienia.

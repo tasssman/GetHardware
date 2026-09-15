@@ -79,6 +79,8 @@ Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on b
 
 ## Walidacja danych ręcznych
 
+W formularzach tekst w nawiasach kwadratowych, np. `[A216]`, jest rzeczywistą wartością domyślną zatwierdzaną klawiszem Enter. Tekst po `np.` jest wyłącznie przykładem. Pola, które mogą pozostać puste, są oznaczone jako opcjonalne i nie pokazują pustych nawiasów `[]`.
+
 - `bought`: `YYYY-MM-DD`, wspólne dla całego spisu;
 - `warr`: `YYYY-MM-DD+N`, np. `2021-05-20+3`;
 - `cenan`: kwota PLN z dwiema cyframi po przecinku, np. `1414,08`;
