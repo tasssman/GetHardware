@@ -245,20 +245,21 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Nie traktować `AdapterRAM` jako wiarygodnej ilości pamięci dla współczesnych kart graficznych.
   - Uwzględnić ograniczenie 32-bitowego pola `AdapterRAM`, szczególnie dla kart mających więcej niż 4 GB VRAM.
   - Rozważyć użycie DXGI do odczytu 64-bitowych wartości pamięci dedykowanej, dedykowanej pamięci systemowej i pamięci współdzielonej.
+  - Dla dedykowanego GPU dodawać do `desc` ilość rzeczywistej pamięci dedykowanej dopiero wtedy, gdy została wiarygodnie odczytana przez DXGI.
   - Pozostawić `Win32_VideoController` jako źródło pomocnicze lub awaryjne.
 
-- [ ] Poprawnie prezentować pamięć grafiki zintegrowanej.
+- [x] Poprawnie prezentować pamięć grafiki zintegrowanej.
   - Nie przedstawiać wartości takiej jak `1024MB` jako rzeczywistego VRAM układu zintegrowanego, jeśli jest to tylko pamięć współdzielona albo wartość raportowana przez sterownik.
-  - Dla zintegrowanego GPU domyślnie pomijać liczbę MB w `desc` albo jednoznacznie oznaczać pamięć jako współdzieloną.
-  - Dla dedykowanego GPU dodawać do `desc` ilość rzeczywistej pamięci dedykowanej, jeśli została wiarygodnie odczytana przez DXGI.
+  - Dla zintegrowanego GPU pomijać liczbę MB w `desc`.
 
 - [x] Filtrować fizyczne adaptery graficzne.
   - Zachować osobny wpis dla każdego fizycznego GPU, np. Intel oraz NVIDIA/AMD w laptopie hybrydowym.
   - Odfiltrować adaptery zdalne, programowe oraz `Microsoft Basic Display Adapter`, ale pokazywać użytkownikowi informację o ich pominięciu.
   - Nie uznawać obecności kilku kontrolerów za błąd.
 
-- [ ] Klasyfikować fizyczne adaptery jako zintegrowane lub dedykowane.
-  - Ostrożnie rozpoznawać grafikę zintegrowaną i dedykowaną; nie opierać klasyfikacji wyłącznie na nazwie lub ilości raportowanej pamięci.
+- [x] Klasyfikować fizyczne adaptery jako zintegrowane lub dedykowane.
+  - Rozpoznawać typowe rodziny Intel UHD/Iris/HD, AMD Radeon Graphics/Vega oraz dedykowane NVIDIA i AMD Radeon RX/Pro.
+  - Nie używać `AdapterRAM` do klasyfikacji; przy niejednoznacznym urządzeniu pytać użytkownika o typ karty.
 
 - [x] Poprawić ustalanie rodzaju połączenia karty graficznej.
   - Nie przypisywać każdej karcie stałej wartości `on board,HDMI`.
@@ -269,16 +270,16 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [ ] Rozszerzyć dane GPU dostępne podczas weryfikacji.
   - Pokazywać nazwę adaptera, `PNPDeviceID`, procesor graficzny, wersję i datę sterownika.
   - Pokazywać pamięć dedykowaną i współdzieloną jako osobne wartości diagnostyczne.
-  - Pokazywać `Status` oraz `ConfigManagerErrorCode` i ostrzegać o niesprawnym urządzeniu.
+  - [x] Odczytywać `Status` oraz `ConfigManagerErrorCode` i ostrzegać o niesprawnym urządzeniu.
   - Bieżącą rozdzielczość i częstotliwość odświeżania wykorzystywać tylko diagnostycznie, szczególnie podczas sesji zdalnej.
 
-- [ ] Przetwarzać każdy adapter graficzny niezależnie.
+- [x] Przetwarzać każdy adapter graficzny niezależnie.
   - Błąd jednego adaptera nie powinien usuwać pozostałych kart graficznych z wyniku.
   - W ostrzeżeniu wskazywać nazwę albo identyfikator problematycznego urządzenia.
 
 - [ ] Ustalić docelowy format wpisu GPU w PHP.
   - Pozostawić typ `Graphic Card`.
-  - Dla grafiki zintegrowanej preferować krótki opis bez mylącej ilości pamięci, np. `Intel(R) Iris(R) Xe Graphics`.
+  - [x] Dla grafiki zintegrowanej używać krótkiego opisu bez mylącej ilości pamięci, np. `Intel(R) Iris(R) Xe Graphics`.
   - Dla grafiki dedykowanej używać formatu takiego jak `4096MB NVIDIA GeForce RTX 3050`, jeśli ilość VRAM została wiarygodnie odczytana.
   - Dane sterownika, identyfikatory i pamięć współdzieloną pozostawić wyłącznie w diagnostyce konsolowej.
 

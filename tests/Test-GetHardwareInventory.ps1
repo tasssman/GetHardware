@@ -232,8 +232,8 @@ function Get-CimInstance {
         }
         'Win32_VideoController' {
             return @(
-                [pscustomobject]@{ AdapterRAM = 1GB; Caption = 'Test graphics'; PNPDeviceID = 'PCI\VEN_8086&DEV_TEST' }
-                [pscustomobject]@{ AdapterRAM = 0; Caption = 'Microsoft Remote Display Adapter'; PNPDeviceID = 'ROOT\RDPIDD' }
+                [pscustomobject]@{ AdapterRAM = 2GB; Caption = 'Intel(R) UHD Graphics'; Name = 'Intel(R) UHD Graphics'; VideoProcessor = 'Intel(R) UHD Graphics Family'; PNPDeviceID = 'PCI\VEN_8086&DEV_9A60'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+                [pscustomobject]@{ AdapterRAM = 0; Caption = 'Microsoft Remote Display Adapter'; Name = 'Microsoft Remote Display Adapter'; VideoProcessor = ''; PNPDeviceID = 'ROOT\RDPIDD'; Status = 'OK'; ConfigManagerErrorCode = 0 }
             )
         }
         'Win32_Battery' {
@@ -348,6 +348,13 @@ Assert-True -Condition ($SoundParts.Count -eq 1) -Message 'Only one main interna
 Assert-True -Condition ($SoundParts[0].Desc -eq 'Realtek Audio') -Message 'The INTELAUDIO FUNC Realtek codec should be preferred.'
 Assert-True -Condition ($SoundParts[0].Conn -eq 'on board') -Message 'The main internal codec should use the on board connection.'
 
+$IntegratedGraphics = [pscustomobject]@{ AdapterRAM = 2GB; Caption = 'Intel(R) UHD Graphics'; VideoProcessor = 'Intel(R) UHD Graphics Family'; PNPDeviceID = 'PCI\VEN_8086&DEV_9A60'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+Assert-True -Condition ((Get-GraphicsAdapterKind -Graphics $IntegratedGraphics) -eq 'Integrated') -Message 'Intel UHD Graphics should be classified as integrated.'
+Assert-True -Condition ((Get-GraphicsDescription -Graphics $IntegratedGraphics) -eq 'Intel(R) UHD Graphics') -Message 'Integrated graphics should not include misleading AdapterRAM in PHP.'
+$DedicatedGraphics = [pscustomobject]@{ AdapterRAM = [uint32]4293918720; Caption = 'NVIDIA GeForce RTX 3050'; VideoProcessor = 'NVIDIA GeForce RTX 3050'; PNPDeviceID = 'PCI\VEN_10DE&DEV_TEST'; Status = 'OK'; ConfigManagerErrorCode = 0 }
+Assert-True -Condition ((Get-GraphicsAdapterKind -Graphics $DedicatedGraphics) -eq 'Dedicated') -Message 'NVIDIA GeForce should be classified as dedicated.'
+Assert-True -Condition ((Get-GraphicsDescription -Graphics $DedicatedGraphics) -eq 'NVIDIA GeForce RTX 3050') -Message 'Unreliable WMI AdapterRAM should not be included for a dedicated GPU.'
+
 $DetectedMainboard = Resolve-MainboardDescription `
     -ModelEntry $TestModelEntry `
     -MemorySpec ([string]$TestModelEntry.memorySpec) `
@@ -415,6 +422,7 @@ Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Sound Card')
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Sound Card').Desc -eq 'Realtek Audio') -Message 'The mocked scan should omit Intel SST and redundant Realtek USB Audio entries.'
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Count -eq 1) -Message 'Software and remote display adapters should be excluded.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Conn -eq 'on board,HDMI,USB-C') -Message 'The user-entered graphics outputs should be preserved.'
+Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Desc -eq 'Intel(R) UHD Graphics') -Message 'The mocked integrated GPU should not contain an AdapterRAM prefix.'
 
 $Inventory = [pscustomobject]@{
     ServiceTag    = '13QJ7D3'

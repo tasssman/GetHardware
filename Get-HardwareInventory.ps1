@@ -1629,14 +1629,55 @@ function Get-GraphicsDescription {
     if ([string]::IsNullOrWhiteSpace($Caption)) {
         $Caption = ([string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Name')).Trim()
     }
-    $MemoryText = ''
-    $AdapterRam = Get-OptionalPropertyValue -InputObject $Graphics -Name 'AdapterRAM'
-    if ($null -ne $AdapterRam -and [double]$AdapterRam -gt 0) {
-        $MemoryText = "$([math]::Round([double]$AdapterRam / 1MB))MB "
+    if ([string]::IsNullOrWhiteSpace($Caption)) { return 'QQ_POPRAW' }
+    return ($Caption -replace '\s+', ' ').Trim()
+}
+
+function Get-GraphicsAdapterKind {
+    param([Parameter(Mandatory)][psobject]$Graphics)
+
+    $Identity = (@(
+        Get-GraphicsDescription -Graphics $Graphics
+        [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'VideoProcessor')
+    ) -join ' ').Trim()
+
+    if ($Identity -match '(?i)Intel(?:\(R\))?.*\b(?:UHD|Iris|HD)\b.*Graphics|Intel.*Graphics Family|AMD Radeon\(TM\) Graphics|Radeon Vega \d+ Graphics') {
+        return 'Integrated'
     }
-    $Description = "$MemoryText$Caption".Trim()
-    if ([string]::IsNullOrWhiteSpace($Description)) { return 'QQ_POPRAW' }
-    return $Description
+    if ($Identity -match '(?i)\bNVIDIA\b|\bGeForce\b|\bQuadro\b|\bTesla\b|Radeon\s+(?:RX|PRO\s+W|Pro\s+WX|R9\b)') {
+        return 'Dedicated'
+    }
+    return 'Unknown'
+}
+
+function Resolve-GraphicsAdapterKind {
+    param([Parameter(Mandatory)][psobject]$Graphics)
+
+    $Kind = Get-GraphicsAdapterKind -Graphics $Graphics
+    if ($Kind -ne 'Unknown') { return $Kind }
+
+    $Description = Get-GraphicsDescription -Graphics $Graphics
+    Write-Section -Title 'Typ karty graficznej'
+    Write-Warning "Nie udało się jednoznacznie sklasyfikować karty '$Description'."
+    Write-Host '[1] Grafika zintegrowana'
+    Write-Host '[2] Grafika dedykowana'
+    $Choice = Read-MenuChoice -Prompt 'Wybierz typ karty [1-2]' -Minimum 1 -Maximum 2
+    if ($Choice -eq 1) { return 'Integrated' }
+    return 'Dedicated'
+}
+
+function Write-GraphicsHealthWarning {
+    param([Parameter(Mandatory)][psobject]$Graphics)
+
+    $Description = Get-GraphicsDescription -Graphics $Graphics
+    $Status = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Status')
+    $ErrorCode = Get-OptionalPropertyValue -InputObject $Graphics -Name 'ConfigManagerErrorCode'
+    if ((-not [string]::IsNullOrWhiteSpace($Status) -and $Status -ne 'OK') -or
+        ($null -ne $ErrorCode -and [int]$ErrorCode -ne 0)) {
+        $StatusText = if ([string]::IsNullOrWhiteSpace($Status)) { 'brak danych' } else { $Status }
+        $CodeText = if ($null -eq $ErrorCode) { 'brak danych' } else { [string]$ErrorCode }
+        Write-Warning "Karta graficzna '$Description' zgłasza Status=$StatusText, ConfigManagerErrorCode=$CodeText."
+    }
 }
 
 function New-HardwarePart {
@@ -2040,25 +2081,39 @@ function Get-HardwareParts {
         $Parts.Add($SoundPart)
     }
 
-    # GRAFIKA: Windows nie udostępnia wiarygodnej listy wszystkich fizycznych
-    # wyjść laptopa. Po odfiltrowaniu adapterów programowych użytkownik wpisuje
-    # złącza dla każdej fizycznej karty; bezpieczną podpowiedzią jest `on board`.
-    # AdapterRAM nadal podlega późniejszej weryfikacji w edytorze podzespołów.
+    # GRAFIKA: AdapterRAM nie jest wiarygodnym rozmiarem VRAM, szczególnie dla
+    # układów zintegrowanych, dlatego nie trafia do opisu PHP. Typowe układy są
+    # klasyfikowane automatycznie, a niejednoznaczne wymagają wyboru użytkownika.
+    # Wyjścia laptopa nadal są wpisywane ręcznie, ponieważ Windows nie przypisuje
+    # ich wiarygodnie do konkretnego GPU.
     try {
         foreach ($Graphics in @(Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop)) {
-            if (-not (Test-PhysicalGraphicsAdapter -Graphics $Graphics)) {
-                $SkippedName = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')
-                Write-Host "Pominięto adapter graficzny: $SkippedName" -ForegroundColor DarkGray
-                continue
-            }
+            try {
+                if (-not (Test-PhysicalGraphicsAdapter -Graphics $Graphics)) {
+                    $SkippedName = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')
+                    Write-Host "Pominięto adapter graficzny: $SkippedName" -ForegroundColor DarkGray
+                    continue
+                }
 
-            $Description = Get-GraphicsDescription -Graphics $Graphics
-            Write-Section -Title 'Wyjścia karty graficznej'
-            Write-Host "Wykryta karta: $Description" -ForegroundColor Green
-            $Connection = Read-TextValue `
-                -Prompt 'Wpisz połączenia/wyjścia graficzne, oddzielając je przecinkami (np. on board,HDMI,DisplayPort,USB-C)' `
-                -Default 'on board'
-            $Parts.Add((New-HardwarePart -Type 'Graphic Card' -Description $Description -Connection $Connection))
+                Write-GraphicsHealthWarning -Graphics $Graphics
+                $Description = Get-GraphicsDescription -Graphics $Graphics
+                $GraphicsKind = Resolve-GraphicsAdapterKind -Graphics $Graphics
+                $GraphicsKindText = if ($GraphicsKind -eq 'Integrated') { 'zintegrowana' } else { 'dedykowana' }
+                Write-Section -Title 'Wyjścia karty graficznej'
+                Write-Host "Wykryta karta: $Description" -ForegroundColor Green
+                Write-Host "Typ:           $GraphicsKindText"
+                if ($GraphicsKind -eq 'Dedicated') {
+                    Write-Host 'Pamięć VRAM nie została dodana: Win32_VideoController.AdapterRAM nie jest wystarczająco wiarygodnym źródłem.' -ForegroundColor DarkGray
+                }
+                $Connection = Read-TextValue `
+                    -Prompt 'Wpisz połączenia/wyjścia graficzne, oddzielając je przecinkami (np. on board,HDMI,DisplayPort,USB-C)' `
+                    -Default 'on board'
+                $Parts.Add((New-HardwarePart -Type 'Graphic Card' -Description $Description -Connection $Connection))
+            }
+            catch {
+                $Identity = [string](Get-OptionalPropertyValue -InputObject $Graphics -Name 'Caption')
+                Write-Warning "Pominięto kartę graficzną '$Identity': $($_.Exception.Message)"
+            }
         }
     }
     catch {
