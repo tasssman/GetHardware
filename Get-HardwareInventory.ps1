@@ -17,6 +17,28 @@ function Write-Section {
     Write-Host "=== $Title ===" -ForegroundColor Cyan
 }
 
+function Confirm-InventoryEnvironment {
+    Write-Section -Title 'Przygotowanie do inwentaryzacji'
+    Write-Host 'Przed rozpoczęciem:'
+    Write-Host ''
+    Write-Host '1. Odłącz wszystkie dodatkowe monitory.'
+    Write-Host '   Dotyczy to również stacji dokujących i sesji pulpitu zdalnego.'
+    Write-Host ''
+    Write-Host '2. Odłącz zewnętrzne urządzenia USB, w szczególności:'
+    Write-Host '   - karty sieciowe,'
+    Write-Host '   - karty dźwiękowe,'
+    Write-Host '   - dyski i pendrive''y,'
+    Write-Host '   - stacje dokujące.'
+    Write-Host ''
+    Write-Warning 'Podłączone urządzenia mogą zostać błędnie zapisane jako podzespoły komputera.'
+    Write-Host '[1] Sprzęt został przygotowany — rozpocznij'
+    Write-Host '[2] Anuluj'
+    $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+    if ($Choice -eq 2) {
+        throw [OperationCanceledException]::new('Anulowano przed rozpoczęciem odczytu sprzętu.')
+    }
+}
+
 function Read-MenuChoice {
     param(
         [Parameter(Mandatory)][string]$Prompt,
@@ -3022,6 +3044,7 @@ function Show-InventorySummary {
 }
 
 function Invoke-HardwareInventory {
+    Confirm-InventoryEnvironment
     $System = Get-SystemOverview
     if ([string]::IsNullOrWhiteSpace($System.Model)) {
         throw 'Nie udało się odczytać modelu komputera.'

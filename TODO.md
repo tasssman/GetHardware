@@ -344,7 +344,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [x] Usunąć sztuczne pomniejszanie `MaxClockSpeed` o 1 MHz.
   - Ustalić, czy było to obejście konkretnego problemu z formatem danych.
 
-- [ ] Zweryfikować ręczną tabelę modeli.
+- [x] Zweryfikować ręczną tabelę modeli.
   - Sprawdzić parametry płyty głównej, pamięci, zasilacza i poboru mocy.
   - Szczególnie przejrzeć wpisy wyglądające na skopiowane pomiędzy różnymi modelami.
   - [x] Obsłużyć sytuację, gdy wykrytego modelu laptopa nie ma w pliku `hardware-models.json`.
@@ -355,9 +355,10 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ## Priorytet niższy / porządki
 
-- [ ] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
+- [x] Po uruchomieniu skryptu wyświetlać użytkownikowi główne założenia.
   1. Laptop nie może mieć podłączonych dodatkowych monitorów — stacjonarnych ani zdalnych.
   2. Przed rozpoczęciem inwentaryzacji należy odłączyć urządzenia USB, w szczególności zewnętrzne karty sieciowe, karty dźwiękowe, dyski, pendrive'y i stacje dokujące.
+  3. Dalszy odczyt rozpoczyna się dopiero po potwierdzeniu przygotowania sprzętu; użytkownik może bezpiecznie anulować działanie.
 
 - [ ] Otwierać stronę wsparcia Dell dla zinwentaryzowanego urządzenia.
   - Po odczytaniu numeru seryjnego (Service Tagu) otworzyć domyślną przeglądarkę bezpośrednio na stronie urządzenia w serwisie Dell.

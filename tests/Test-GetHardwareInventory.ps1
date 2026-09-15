@@ -403,6 +403,18 @@ function Read-Host {
     return $script:MockReadHostValue
 }
 
+$script:MockReadHostQueue.Enqueue('1')
+Confirm-InventoryEnvironment
+$EnvironmentCancellationDetected = $false
+$script:MockReadHostQueue.Enqueue('2')
+try {
+    Confirm-InventoryEnvironment
+}
+catch [OperationCanceledException] {
+    $EnvironmentCancellationDetected = $true
+}
+Assert-True -Condition $EnvironmentCancellationDetected -Message 'The preparation screen should allow cancellation before hardware collection starts.'
+
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'laptop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'Matching device types should be accepted without a question.'
 $script:MockReadHostQueue.Enqueue('2')
 Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'desktop' -DetectedDeviceType 'laptop' -ChassisDescription 'Notebook (10)') -eq 'laptop') -Message 'The user should be able to use the detected type for the current device.'

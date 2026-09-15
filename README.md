@@ -21,13 +21,14 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 ## Przebieg
 
-1. Odczyt modelu, Service Tagu, procesora, płyty głównej i pozostałych podzespołów.
-2. Sprawdzenie modelu w `hardware-models.json`.
-3. Wybór istniejącego spisu albo utworzenie nowego.
-4. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
-5. Przegląd, edycja, dodawanie lub usuwanie wykrytych podzespołów.
-6. Wprowadzenie gwarancji, ceny, etykiety Windows, pomieszczenia i notatki.
-7. Wyświetlenie podsumowania i zapis po zatwierdzeniu.
+1. Potwierdzenie odłączenia dodatkowych monitorów, sesji pulpitu zdalnego, stacji dokujących i zewnętrznych urządzeń USB.
+2. Odczyt modelu, Service Tagu, procesora, płyty głównej i pozostałych podzespołów.
+3. Sprawdzenie modelu w `hardware-models.json`.
+4. Wybór istniejącego spisu albo utworzenie nowego.
+5. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
+6. Przegląd, edycja, dodawanie lub usuwanie wykrytych podzespołów.
+7. Wprowadzenie gwarancji, ceny, etykiety Windows, pomieszczenia i notatki.
+8. Wyświetlenie podsumowania i zapis po zatwierdzeniu.
 
 Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 

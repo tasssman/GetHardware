@@ -4,6 +4,8 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 
 ## Uruchamianie
 
+- Przed jakimkolwiek odczytem sprzętu skrypt przypomina o odłączeniu dodatkowych monitorów, sesji pulpitu zdalnego, stacji dokujących i zewnętrznych urządzeń USB.
+- Użytkownik musi potwierdzić przygotowanie stanowiska albo może bezpiecznie anulować działanie.
 - Skrypt jest uruchamiany bezpośrednio z konsoli Windows PowerShell.
 - Projekt nie używa pliku BAT.
 - Docelowa nazwa nowego skryptu to `Get-HardwareInventory.ps1`.
