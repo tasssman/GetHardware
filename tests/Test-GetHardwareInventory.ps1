@@ -300,6 +300,8 @@ Assert-True -Condition ($SlotMemory.Parts[0].Conn -eq 'on board') -Message 'Repl
 Assert-True -Condition ($SlotMemory.Parts[0].Sn -eq '16596967') -Message 'A valid RAM serial number should be preserved.'
 Assert-True -Condition ($SlotMemory.DetectedSpec -eq 'DDR4 3200MHz x4') -Message 'Detected memorySpec should contain type, speed, and slot count without trusting SMBIOS maximum capacity.'
 Assert-True -Condition ($SlotMemory.ReportedMaximumCapacityGb -eq 128) -Message 'The SMBIOS maximum should remain available only as diagnostic data.'
+Assert-True -Condition (Test-InstalledMemoryDetected -MemoryInventory $SlotMemory) -Message 'Detected RAM parts should be distinguished from motherboard memorySpec detection.'
+Assert-True -Condition (-not (Test-InstalledMemoryDetected -MemoryInventory ([pscustomobject]@{ Parts = @() }))) -Message 'An empty RAM part list should be reported as no installed memory detected.'
 
 $MemoryWithInvalidRecord = ConvertTo-MemoryInventory `
     -MemoryDevices @(

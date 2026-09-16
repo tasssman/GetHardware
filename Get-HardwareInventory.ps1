@@ -354,6 +354,29 @@ function Read-DeviceTypeForNewModel {
     return @('laptop', 'tablet', 'desktop', 'server', 'storage')[$Choice - 1]
 }
 
+function Test-InstalledMemoryDetected {
+    param([AllowNull()][psobject]$MemoryInventory)
+
+    if ($null -eq $MemoryInventory) { return $false }
+    $PartsProperty = $MemoryInventory.PSObject.Properties['Parts']
+    if ($null -eq $PartsProperty) { return $false }
+    return @($PartsProperty.Value).Count -gt 0
+}
+
+function Write-MemorySpecDetectionWarning {
+    param([AllowNull()][psobject]$MemoryInventory)
+
+    if (Test-InstalledMemoryDetected -MemoryInventory $MemoryInventory) {
+        Write-Host 'Zainstalowana pamięć RAM została wykryta i zostanie pokazana na liście podzespołów.' -ForegroundColor Green
+        Write-Warning 'Nie udało się jedynie automatycznie ustalić pełnej konfiguracji pamięci obsługiwanej przez płytę główną, np. liczby gniazd.'
+        Write-Host 'Problem dotyczy wyłącznie opisu memorySpec używanego w polu mainb, a nie odczytu zainstalowanej pamięci RAM.' -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Warning 'Nie udało się odczytać zainstalowanej pamięci RAM ani jednoznacznie ustalić konfiguracji pamięci obsługiwanej przez płytę główną.'
+    Write-Warning 'Wpisy RAM nie zostaną automatycznie dodane do listy podzespołów; trzeba je później dodać ręcznie w edytorze listy.'
+}
+
 function Read-MemorySpecForNewModel {
     param(
         [Parameter(Mandatory)][string]$Model,
@@ -366,7 +389,7 @@ function Read-MemorySpecForNewModel {
     }
 
     if ([string]::IsNullOrWhiteSpace($DetectedSpec)) {
-        Write-Warning 'Nie udało się jednoznacznie wykryć typu, szybkości i konfiguracji pamięci.'
+        Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory
         return Read-CompleteMemorySpec -Model $Model -DetectedSpec $null
     }
 
@@ -2338,6 +2361,9 @@ function Resolve-MemorySpec {
         if ($DetectedReliable) {
             Write-Host "Dane wykryte automatycznie: $DetectedBaseSpec" -ForegroundColor Green
         }
+        else {
+            Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory
+        }
         Write-Host 'Uzupełnij pełną specyfikację na podstawie dokumentacji producenta, np. DDR4 3200MHz x2, max64GB.'
         $CustomSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
         Write-Host '[1] Zapisz tę wartość w JSON'
@@ -2381,7 +2407,7 @@ function Resolve-MemorySpec {
         }
     }
     else {
-        Write-Warning 'Nie udało się jednoznacznie ustalić konfiguracji pamięci dla pola mainb.'
+        Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory
         $PromptDefault = if ([string]::IsNullOrWhiteSpace($DatabaseSpec)) { $null } else { $DatabaseSpec }
         $CustomSpec = Read-TextValue `
             -Prompt 'Wpisz konfigurację pamięci lub zatwierdź wartość z JSON' `

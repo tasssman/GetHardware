@@ -13,27 +13,29 @@ Aktualna wersja skryptu: `v1.0.0`. Numer wersji jest wyświetlany jako pierwszy 
 
 ## Uruchomienie
 
-Na inwentaryzowanym laptopie otwórz Windows PowerShell i przejdź do katalogu skryptu na udziale sieciowym:
+Na inwentaryzowanym laptopie otwórz Windows PowerShell. Jeżeli wykonywanie skryptów jest wyłączone, zezwól na nie wyłącznie w bieżącym oknie PowerShell:
 
 ```powershell
-Set-Location -LiteralPath '\\ntshare\helpdesk\scripts\GetHardware'
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 ```
 
-Następnie uruchom skrypt z tego katalogu:
+Polecenie nie zmienia trwale polityki komputera. Ustawienie znika po zamknięciu tego okna PowerShell.
+
+Komputer jest obsługiwany przez użytkownika spoza domeny, dlatego podaj konto domenowe, utwórz tymczasowy dysk `GH:` prowadzący do katalogu sieciowego i uruchom skrypt poniższym poleceniem w jednej linii. Zastąp `DOMENA\uzytkownik` właściwą nazwą konta:
 
 ```powershell
-.\Get-HardwareInventory.ps1
+$Credential=Get-Credential -Message 'Podaj konto domenowe' -UserName 'DOMENA\uzytkownik'; New-PSDrive -Name GH -PSProvider FileSystem -Root '\\ntshare\helpdesk\scripts\GetHardware' -Credential $Credential | Out-Null; Set-Location 'GH:\'; .\Get-HardwareInventory.ps1
 ```
 
-Jeżeli wykonywanie skryptów PowerShell jest wyłączone na laptopie, uruchom skrypt jednorazowo z pominięciem polityki wykonywania:
+Hasło jest podawane w bezpiecznym oknie i nie należy wpisywać go bezpośrednio w poleceniu. Skrypt oraz pliki bazy są odczytywane z udziału sieciowego, a wyniki trafiają do `\\ntshare\helpdesk\scripts\GetHardware\output`.
+
+Po zakończeniu pracy można odłączyć tymczasowy dysk:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File '\\ntshare\helpdesk\scripts\GetHardware\Get-HardwareInventory.ps1'
+Set-Location 'C:\'; Remove-PSDrive -Name GH
 ```
 
-Parametr `-ExecutionPolicy Bypass` dotyczy tylko uruchomionego w ten sposób procesu PowerShell i nie zmienia trwale ustawień komputera.
-
-Skrypt korzysta z plików znajdujących się na udziale sieciowym, a wyniki zapisuje w katalogu `\\ntshare\helpdesk\scripts\GetHardware\output`.
+Jeśli `MachinePolicy` albo `UserPolicy` widoczne w `Get-ExecutionPolicy -List` są wymuszone administracyjnie, ustawienie dla zakresu `Process` może ich nie zastąpić. W takim przypadku potrzebny jest podpisany skrypt albo zmiana polityki przez administratora.
 
 Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu prosi o jej wpisanie. Przy kolejnych uruchomieniach wyświetla istniejące spisy i opcję utworzenia nowego.
 
@@ -90,6 +92,8 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie.
 
 Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy użytkownik może użyć wartości wykrytej, zachować wartość z bazy albo wpisać własną. Aktualizacja `memorySpec` w JSON-ie następuje tylko po jednoznacznym wyborze użytkownika i jest wykonywana przez zweryfikowany plik tymczasowy.
+
+Odczyt zainstalowanych modułów RAM jest niezależny od ustalania konfiguracji pamięci obsługiwanej przez płytę główną. Jeśli moduły zostały wykryte, ale nie udało się ustalić np. liczby gniazd dla `memorySpec`, skrypt wyraźnie informuje, że problem dotyczy tylko opisu pola `mainb`. Dopiero brak wpisów zainstalowanej pamięci powoduje ostrzeżenie o konieczności ręcznego dodania RAM-u w edytorze podzespołów.
 
 Przy dodawaniu nieznanego modelu `baseboardFallback` otrzymuje nazwę komputera, a `deviceType` jest pobierany z jednoznacznego wyniku `Win32_SystemEnclosure.ChassisTypes`. Jeśli typu nie można ustalić, skrypt prosi o jego wybór. Maksymalna pojemność w `memorySpec` zawsze wymaga ręcznego potwierdzenia na podstawie dokumentacji producenta; wartość `MaxCapacity`/`MaxCapacityEx` z SMBIOS nie jest używana jako limit konkretnego modelu.
 

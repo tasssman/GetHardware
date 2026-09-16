@@ -1,0 +1,26 @@
+# Zmiany w wersji v1.0.0
+
+- `12e00c0` — Version add
+- `2a57179` — Instructions for script run
+- `3b13b68` — Default text for commands corrections
+- `32fe3ba` — Label corrections
+- `1621c92` — Open DELL site with specyfic SN for hardware
+- `6b10cd1` — Information screen
+- `45006f1` — New model and crating new record in json
+- `8050ce1` — New model and crating new record in json
+- `1a22cdf` — Battery corrections
+- `c505ec6` — Video card corrections
+- `4225eff` — max RAM changed
+- `6a65beb` — Sound cards corrections
+- `b0d7044` — Network card corrections
+- `4563958` — Disk health section
+- `c692c2e` — Graphics card outputs corrections
+- `c40fb09` — Case description correction
+- `5e128e9` — Disk corrections
+- `f6b269c` — Matrix corrections
+- `3a927a6` — RAM corrections
+- `28a9458` — Proccessor info correction
+- `725cf8d` — Main board corrections
+- `0f8c92e` — Proccessor informations
+- `4cf127f` — First beta and todo list
+- `d7b1d39` — First commit

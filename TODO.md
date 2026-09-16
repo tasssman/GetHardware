@@ -88,6 +88,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Jeśli `memorySpec` nie zawiera `max...GB`, ostrzec użytkownika, wymusić wpisanie pełnej wartości i zapytać, czy zapisać ją w JSON.
   - Przy różnicy typu, szybkości lub liczby gniazd względem `memorySpec` użytkownik wybiera wartość dla PHP i decyduje, czy zaktualizować JSON; automatyczny odczyt nie zastępuje ręcznie zweryfikowanego maksimum.
   - Nie mylić aktualnie zainstalowanej pamięci z maksymalną pamięcią obsługiwaną przez płytę główną.
+  - [x] W komunikatach rozróżniać brak odczytu modułów RAM od braku pełnej konfiguracji pamięci obsługiwanej przez płytę główną.
 
 - [x] Poprawić rozpoznawanie pamięci lutowanej i wymiennej.
   - Obecne wyszukiwanie słów `onboard`, `on board` i `solder` w `DeviceLocator` oraz `BankLabel` jest tylko heurystyką.
