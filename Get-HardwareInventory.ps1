@@ -412,13 +412,31 @@ function Read-NewModelDatabaseEntry {
     param(
         [Parameter(Mandatory)][string]$Model,
         [AllowNull()][psobject]$MemoryInventory,
-        [AllowNull()][string]$DetectedDeviceType
+        [AllowNull()][string]$DetectedDeviceType,
+        [AllowNull()][psobject]$SystemIdentity
     )
 
+    Write-Section -Title 'Nieznany model komputera'
+    if ($null -ne $SystemIdentity) {
+        Write-Host "Producent:       $($SystemIdentity.Manufacturer)"
+        Write-Host "SystemFamily:    $($SystemIdentity.SystemFamily)"
+        Write-Host "Model systemowy: $($SystemIdentity.SystemModel)"
+        Write-Host "SystemSKU:       $($SystemIdentity.SystemSku)"
+    }
+    Write-Host ''
+    Write-Host "Proponowany model: $Model" -ForegroundColor Green
+    Write-Host '[1] Zaakceptuj proponowany model'
+    Write-Host '[2] Anuluj'
+    $ModelChoice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+    if ($ModelChoice -eq 2) {
+        throw [OperationCanceledException]::new('Anulowano dodawanie nowego modelu.')
+    }
+    $AcceptedModel = $Model
+
     Write-Section -Title 'Nowy model w bazie'
-    Write-Host "Model:               $Model"
-    Write-Host "Awaryjny opis płyty: $Model"
-    $MemorySpecDefault = Read-MemorySpecForNewModel -Model $Model -MemoryInventory $MemoryInventory
+    Write-Host "Model:               $AcceptedModel"
+    Write-Host "Awaryjny opis płyty: $AcceptedModel"
+    $MemorySpecDefault = Read-MemorySpecForNewModel -Model $AcceptedModel -MemoryInventory $MemoryInventory
     $DeviceTypeDefault = Read-DeviceTypeForNewModel -DetectedDeviceType $DetectedDeviceType
     Write-Host "Typ urządzenia:      $DeviceTypeDefault" -ForegroundColor Green
     $PowerMaxDefault = $null
@@ -430,7 +448,7 @@ function Read-NewModelDatabaseEntry {
         $Power = Read-NonNegativeInteger -Prompt 'Pobór mocy — powerW [W]' -Default $PowerDefault
         $Other = Read-TextValue -Prompt 'Dodatkowe informacje — other (opcjonalnie)' -Default $OtherDefault -AllowEmpty
         $Entry = New-ModelDatabaseEntry `
-            -Model $Model `
+            -Model $AcceptedModel `
             -MemorySpec $MemorySpecDefault `
             -PowerMaxW $PowerMax `
             -PowerW $Power `
@@ -459,7 +477,8 @@ function Wait-ForKnownModel {
         [Parameter(Mandatory)][string]$Model,
         [Parameter(Mandatory)][string]$DatabasePath,
         [AllowNull()][psobject]$MemoryInventory,
-        [AllowNull()][string]$DetectedDeviceType
+        [AllowNull()][string]$DetectedDeviceType,
+        [AllowNull()][psobject]$SystemIdentity
     )
 
     while ($true) {
@@ -474,9 +493,10 @@ function Wait-ForKnownModel {
             $NewEntry = Read-NewModelDatabaseEntry `
                 -Model $Model `
                 -MemoryInventory $MemoryInventory `
-                -DetectedDeviceType $DetectedDeviceType
+                -DetectedDeviceType $DetectedDeviceType `
+                -SystemIdentity $SystemIdentity
             $SavedEntry = Add-ModelDatabaseEntry -DatabasePath $DatabasePath -Entry $NewEntry
-            Write-Host "Dodano model '$Model' do hardware-models.json." -ForegroundColor Green
+            Write-Host "Dodano model '$($SavedEntry.model)' do hardware-models.json." -ForegroundColor Green
             return $SavedEntry
         }
         catch {
@@ -690,6 +710,44 @@ function Resolve-DeviceType {
     return $DatabaseType
 }
 
+function Test-SystemIdentityValue {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return $Value.Trim() -notmatch '^(?i:To be filled by O\.E\.M\.|Default string|System Product Name|System Version|Unknown|None|N/A|Not Specified)$'
+}
+
+function Select-SystemIdentityValue {
+    param([AllowNull()][object[]]$Candidates)
+
+    foreach ($Candidate in @($Candidates)) {
+        $Value = ([string]$Candidate).Trim()
+        if (Test-SystemIdentityValue -Value $Value) {
+            return $Value
+        }
+    }
+    return ''
+}
+
+function Get-CanonicalComputerModel {
+    param(
+        [AllowNull()][string]$SystemFamily,
+        [AllowNull()][string]$SystemModel
+    )
+
+    $Family = if (Test-SystemIdentityValue -Value $SystemFamily) { $SystemFamily.Trim() } else { '' }
+    $Model = if (Test-SystemIdentityValue -Value $SystemModel) { $SystemModel.Trim() } else { '' }
+    if ([string]::IsNullOrWhiteSpace($Family) -and [string]::IsNullOrWhiteSpace($Model)) {
+        return ''
+    }
+    if ([string]::IsNullOrWhiteSpace($Family)) { return $Model }
+    if ([string]::IsNullOrWhiteSpace($Model)) { return $Family }
+    if ($Model.IndexOf($Family, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        return $Model
+    }
+    return "$Family ($Model)"
+}
+
 function Get-SystemOverview {
     Write-Section -Title 'Odczyt danych komputera'
 
@@ -703,6 +761,25 @@ function Get-SystemOverview {
     }
     catch {
         Write-Warning "Nie udało się odczytać danych systemu z Win32_ComputerSystem: $($_.Exception.Message)"
+    }
+
+    $ComputerSystemProduct = $null
+    try {
+        $ComputerSystemProduct = Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać danych produktu z Win32_ComputerSystemProduct: $($_.Exception.Message)"
+    }
+
+    $RegistrySystem = $null
+    try {
+        $RegistrySystem = Get-ItemProperty `
+            -LiteralPath 'HKLM:\HARDWARE\DESCRIPTION\System\BIOS' `
+            -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Nie udało się odczytać danych produktu z rejestru systemowego: $($_.Exception.Message)"
     }
 
     $Bios = $null
@@ -740,11 +817,33 @@ function Get-SystemOverview {
         Write-Warning "Nie udało się odczytać procesora z Win32_Processor: $($_.Exception.Message)"
     }
 
-    if ($null -eq $ComputerSystem -or [string]::IsNullOrWhiteSpace([string]$ComputerSystem.Model)) {
-        throw 'Nie udało się odczytać modelu komputera z Win32_ComputerSystem. Model jest wymagany do wyszukania urządzenia w bazie.'
-    }
     if ($Processors.Count -eq 0) {
         throw 'Nie udało się odczytać procesora z Win32_Processor. Dane procesora są wymagane do utworzenia wpisu.'
+    }
+
+    $SystemManufacturer = Select-SystemIdentityValue -Candidates @(
+        $(if ($null -ne $ComputerSystem) { Get-OptionalPropertyValue -InputObject $ComputerSystem -Name 'Manufacturer' }),
+        $(if ($null -ne $ComputerSystemProduct) { Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Vendor' }),
+        $(if ($null -ne $RegistrySystem) { Get-OptionalPropertyValue -InputObject $RegistrySystem -Name 'SystemManufacturer' })
+    )
+    $SystemModel = Select-SystemIdentityValue -Candidates @(
+        $(if ($null -ne $ComputerSystem) { Get-OptionalPropertyValue -InputObject $ComputerSystem -Name 'Model' }),
+        $(if ($null -ne $ComputerSystemProduct) { Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Name' }),
+        $(if ($null -ne $RegistrySystem) { Get-OptionalPropertyValue -InputObject $RegistrySystem -Name 'SystemProductName' })
+    )
+    $SystemFamily = Select-SystemIdentityValue -Candidates @(
+        $(if ($null -ne $ComputerSystem) { Get-OptionalPropertyValue -InputObject $ComputerSystem -Name 'SystemFamily' }),
+        $(if ($null -ne $RegistrySystem) { Get-OptionalPropertyValue -InputObject $RegistrySystem -Name 'SystemFamily' }),
+        $(if ($null -ne $ComputerSystemProduct) { Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Version' })
+    )
+    $SystemSku = Select-SystemIdentityValue -Candidates @(
+        $(if ($null -ne $ComputerSystem) { Get-OptionalPropertyValue -InputObject $ComputerSystem -Name 'SystemSKUNumber' }),
+        $(if ($null -ne $ComputerSystemProduct) { Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'SKUNumber' }),
+        $(if ($null -ne $RegistrySystem) { Get-OptionalPropertyValue -InputObject $RegistrySystem -Name 'SystemSKU' })
+    )
+    $CanonicalModel = Get-CanonicalComputerModel -SystemFamily $SystemFamily -SystemModel $SystemModel
+    if ([string]::IsNullOrWhiteSpace($CanonicalModel)) {
+        throw 'Nie udało się ustalić modelu komputera z Win32_ComputerSystem, Win32_ComputerSystemProduct ani rejestru systemowego.'
     }
 
     $CoreCount = [int](($Processors | Measure-Object -Property NumberOfCores -Sum).Sum)
@@ -761,8 +860,15 @@ function Get-SystemOverview {
 
     return [pscustomobject]@{
         ServiceTag     = $ServiceTag
-        Model          = ([string]$ComputerSystem.Model).Trim()
-        Manufacturer   = ([string]$ComputerSystem.Manufacturer).Trim()
+        Model          = $CanonicalModel
+        Manufacturer   = $SystemManufacturer
+        SystemModel    = $SystemModel
+        SystemFamily   = $SystemFamily
+        SystemSku      = $SystemSku
+        ProductVendor  = if ($null -ne $ComputerSystemProduct) { ([string](Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Vendor')).Trim() } else { '' }
+        ProductName    = if ($null -ne $ComputerSystemProduct) { ([string](Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Name')).Trim() } else { '' }
+        ProductVersion = if ($null -ne $ComputerSystemProduct) { ([string](Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'Version')).Trim() } else { '' }
+        ProductSku     = if ($null -ne $ComputerSystemProduct) { ([string](Get-OptionalPropertyValue -InputObject $ComputerSystemProduct -Name 'SKUNumber')).Trim() } else { '' }
         Processor      = ($ProcessorNames -join ' / ')
         CoreCount      = $CoreCount
         ClockSpeedMhz  = $ClockSpeedMhz
@@ -3128,13 +3234,17 @@ function Invoke-HardwareInventory {
 
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
     Open-DellSupportPage -Manufacturer $System.Manufacturer -ServiceTag $ServiceTag
-    Write-Host "Wykryty model: $($System.Model)" -ForegroundColor Green
+    Write-Host "Model systemowy: $($System.SystemModel)"
+    Write-Host "Rodzina systemu: $($System.SystemFamily)"
+    Write-Host "Model używany do wyszukania w bazie: $($System.Model)" -ForegroundColor Green
     $MemoryInventory = Get-MemoryInventory
     $ModelEntry = Wait-ForKnownModel `
         -Model $System.Model `
         -DatabasePath $ModelDatabasePath `
         -MemoryInventory $MemoryInventory `
-        -DetectedDeviceType $System.DetectedDeviceType
+        -DetectedDeviceType $System.DetectedDeviceType `
+        -SystemIdentity $System
+    $ResolvedModel = ([string]$ModelEntry.model).Trim()
     $ResolvedDeviceType = Resolve-DeviceType `
         -DatabaseDeviceType ([string]$ModelEntry.deviceType) `
         -DetectedDeviceType $System.DetectedDeviceType `
@@ -3167,11 +3277,11 @@ function Invoke-HardwareInventory {
     $Bought = Get-CollectionBoughtDate -Collection $Collection
 
     while ($true) {
-        $DetectedParts = Get-HardwareParts -ComputerModel $System.Model -MemoryInventory $MemoryInventory
+        $DetectedParts = Get-HardwareParts -ComputerModel $ResolvedModel -MemoryInventory $MemoryInventory
         $Review = Review-HardwareParts `
             -InitialParts $DetectedParts `
             -ServiceTag $ServiceTag `
-            -ComputerModel $System.Model `
+            -ComputerModel $ResolvedModel `
             -Processor $System.Processor `
             -CoreCount $System.CoreCount `
             -ClockSpeedMhz $System.ClockSpeedMhz `
@@ -3201,7 +3311,7 @@ function Invoke-HardwareInventory {
     while ($true) {
         $Inventory = [pscustomobject]@{
             ServiceTag    = $ServiceTag
-            Model         = $System.Model
+            Model         = $ResolvedModel
             Bought        = $Bought
             Warranty      = $Manual.Warranty
             Price         = $Manual.Price
@@ -3237,7 +3347,7 @@ function Invoke-HardwareInventory {
             $Review = Review-HardwareParts `
                 -InitialParts $Parts `
                 -ServiceTag $ServiceTag `
-                -ComputerModel $System.Model `
+                -ComputerModel $ResolvedModel `
                 -Processor $System.Processor `
                 -CoreCount $System.CoreCount `
                 -ClockSpeedMhz $System.ClockSpeedMhz `
@@ -3255,11 +3365,11 @@ function Invoke-HardwareInventory {
                     -Manufacturer $System.BaseBoardManufacturer `
                     -Product $System.BaseBoardProduct `
                     -Version $System.BaseBoardVersion
-                $DetectedParts = Get-HardwareParts -ComputerModel $System.Model -MemoryInventory $MemoryInventory
+                $DetectedParts = Get-HardwareParts -ComputerModel $ResolvedModel -MemoryInventory $MemoryInventory
                 $Review = Review-HardwareParts `
                     -InitialParts $DetectedParts `
                     -ServiceTag $ServiceTag `
-                    -ComputerModel $System.Model `
+                    -ComputerModel $ResolvedModel `
                     -Processor $System.Processor `
                     -CoreCount $System.CoreCount `
                     -ClockSpeedMhz $System.ClockSpeedMhz `

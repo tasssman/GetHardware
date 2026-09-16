@@ -19,6 +19,8 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 - Na początku pracy z urządzeniem skrypt automatycznie odczytuje Service Tag/numer seryjny z BIOS-u.
 - Jeśli odczyt się nie powiedzie albo zwróci pustą lub niewiarygodną wartość, skrypt zgłasza problem i dopiero wtedy prosi użytkownika o ręczne podanie identyfikatora.
 - Przed użyciem automatycznie odczytany lub ręcznie podany identyfikator jest normalizowany i walidowany.
+- Model komputera jest budowany z `SystemFamily` i `Model`: powtórzona rodzina nie jest dodawana drugi raz, a różny kod modelu jest umieszczany w nawiasie.
+- Do pustych lub zastępczych danych identyfikacyjnych można użyć odpowiadających wartości z `Win32_ComputerSystemProduct` i rejestru systemowego; nie wykonuje się dopasowania przybliżonego do wpisów bazy.
 - Etykietę systemu można wybrać jako `W10P` lub `W11P`, a także wpisać własną niepustą wartość.
 - Po ustaleniu Service Tagu urządzenia Dell skrypt pokazuje adres jego strony wsparcia i otwiera ją w domyślnej przeglądarce. Nieudane otwarcie nie zatrzymuje inwentaryzacji.
 - Strona wsparcia Dell ani jej komentarz w PHP nie są generowane dla urządzeń innych producentów.
@@ -30,6 +32,7 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 - Skrypt wczytuje oraz waliduje bazę i nigdy nie zmienia jej bez decyzji użytkownika.
 - Wyjątkiem jest interaktywnie zatwierdzona aktualizacja pola `memorySpec`: przy różnicy między SMBIOS i JSON-em użytkownik może zapisać wykrytą albo własną wartość w bazie.
 - Jeśli wykrytego modelu nie ma w bazie, skrypt uruchamia interaktywny kreator wpisu i nie przechodzi do dalszego przetwarzania przed jego zatwierdzeniem.
+- Przed utworzeniem wpisu użytkownik widzi producenta, `SystemFamily`, systemowy `Model`, `SystemSKU` oraz wynikową nazwę i musi ją zaakceptować.
 - Nazwa modelu, `baseboardFallback`, wykryta część `memorySpec` oraz jednoznaczny `deviceType` są uzupełniane automatycznie. Użytkownik podaje zweryfikowane maksimum pamięci, `powerMaxW`, `powerW` i `other`.
 - Skrypt pokazuje kompletny wpis przed zapisem, zmienia bazę wyłącznie po zatwierdzeniu, ponownie ją waliduje i następnie kontynuuje bieżący spis.
 

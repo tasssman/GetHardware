@@ -131,6 +131,15 @@ function Get-NetAdapter {
         [pscustomobject]@{ Name = 'Local Area Connection* 7'; InterfaceDescription = 'WAN Miniport (IP)'; PermanentAddress = ''; MacAddress = ''; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'Unspecified'; PnPDeviceID = 'SWD\MSRRAS\MS_NDISWANIP' }
     )
 }
+function Get-ItemProperty {
+    param([string]$LiteralPath, $ErrorAction)
+    return [pscustomobject]@{
+        SystemManufacturer = 'Dell Inc.'
+        SystemProductName  = 'Latitude 7420'
+        SystemFamily       = 'Latitude'
+        SystemSKU          = 'TEST-SKU'
+    }
+}
 function Get-CimInstance {
     param(
         [string]$ClassName,
@@ -145,8 +154,19 @@ function Get-CimInstance {
     switch ($ClassName) {
         'Win32_ComputerSystem' {
             return [pscustomobject]@{
-                Model        = 'Latitude 7420'
-                Manufacturer = 'Dell Inc.'
+                Model           = 'Latitude 7420'
+                Manufacturer    = 'Dell Inc.'
+                SystemFamily    = 'Latitude'
+                SystemSKUNumber = 'TEST-SKU'
+            }
+        }
+        'Win32_ComputerSystemProduct' {
+            return [pscustomobject]@{
+                Vendor            = 'Dell Inc.'
+                Name              = 'Latitude 7420'
+                Version           = 'Latitude'
+                IdentifyingNumber = '13QJ7D3'
+                SKUNumber         = 'TEST-SKU'
             }
         }
         'Win32_BIOS' {
@@ -272,10 +292,16 @@ function Get-CimInstance {
 
 $SystemOverview = Get-SystemOverview
 Assert-True -Condition ($SystemOverview.ServiceTag -eq '13QJ7D3') -Message 'The system overview should read the BIOS serial number.'
-Assert-True -Condition ($SystemOverview.Model -eq 'Latitude 7420') -Message 'The system overview should read the computer model.'
+Assert-True -Condition ($SystemOverview.Model -eq 'Latitude 7420') -Message 'A Dell family repeated in the system model should not be duplicated.'
+Assert-True -Condition ($SystemOverview.SystemModel -eq 'Latitude 7420') -Message 'The raw system model should remain available for verification.'
+Assert-True -Condition ($SystemOverview.SystemFamily -eq 'Latitude') -Message 'The system family should remain available for verification.'
+Assert-True -Condition ($SystemOverview.SystemSku -eq 'TEST-SKU') -Message 'The system SKU should remain available for verification.'
 Assert-True -Condition ($SystemOverview.BaseBoardProduct -eq '0FFCXR') -Message 'The system overview should read the baseboard product.'
 Assert-True -Condition ($SystemOverview.ChassisDescription -eq 'Notebook (10)') -Message 'The system overview should expose the SMBIOS chassis name and code.'
 Assert-True -Condition ($SystemOverview.DetectedDeviceType -eq 'laptop') -Message 'Notebook chassis type 10 should map to laptop.'
+Assert-True -Condition ((Get-CanonicalComputerModel -SystemFamily 'Yoga Slim 7 15ILL9' -SystemModel '83HM') -eq 'Yoga Slim 7 15ILL9 (83HM)') -Message 'A Lenovo family and machine type should be combined into the JSON/PHP model.'
+Assert-True -Condition ((Get-CanonicalComputerModel -SystemFamily 'Latitude' -SystemModel 'Latitude 5421') -eq 'Latitude 5421') -Message 'A repeated Dell family should be removed from the combined model.'
+Assert-True -Condition ((Get-CanonicalComputerModel -SystemFamily 'Default string' -SystemModel 'Custom Model') -eq 'Custom Model') -Message 'Placeholder family values should be ignored.'
 
 $script:FailedCimClass = 'Win32_BIOS'
 $SystemWithoutBios = Get-SystemOverview
@@ -596,6 +622,7 @@ try {
     Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'Updating memorySpec should never replace the verified maximum with SMBIOS MaxCapacityEx.'
     Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
+    $script:MockReadHostQueue.Enqueue('1')
     $script:MockReadHostQueue.Enqueue('64')
     $script:MockReadHostQueue.Enqueue('130')
     $script:MockReadHostQueue.Enqueue('65')

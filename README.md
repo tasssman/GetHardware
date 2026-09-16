@@ -53,6 +53,14 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 
+### Identyfikacja modelu
+
+Skrypt pobiera producenta, `Model`, `SystemFamily` i `SystemSKUNumber` z `Win32_ComputerSystem`. Dane z `Win32_ComputerSystemProduct` oraz klucza `HKLM:\HARDWARE\DESCRIPTION\System\BIOS` są źródłami awaryjnymi dla pustych lub zastępczych wartości.
+
+Nazwa używana do dokładnego wyszukania wpisu w `hardware-models.json` oraz później w polu PHP `model` jest budowana z `SystemFamily` i `Model`. Jeśli `Model` zawiera już nazwę rodziny, nie jest ona powtarzana: `Latitude` i `Latitude 5421` dają `Latitude 5421`. Gdy wartości są różne, kod modelu jest dodawany w nawiasie: `Yoga Slim 7 15ILL9` i `83HM` dają `Yoga Slim 7 15ILL9 (83HM)`.
+
+Istniejący wpis w JSON-ie jest traktowany jako poprawny i musi dokładnie odpowiadać zbudowanej nazwie. Przy braku wpisu skrypt pokazuje producenta, rodzinę, model systemowy, SKU oraz proponowaną nazwę. Użytkownik musi zaakceptować propozycję, a następnie kompletny nowy wpis JSON przed jego zapisaniem. Struktura `hardware-models.json` nie została rozszerzona o dodatkowe pola identyfikacyjne.
+
 ## Pliki wynikowe
 
 Wyniki trafiają zawsze do katalogu `output` obok uruchomionego skryptu:

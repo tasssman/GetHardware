@@ -14,6 +14,13 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Model i dane procesora są krytyczne; brak któregoś z nich zatrzymuje zapis z precyzyjnym komunikatem.
   - BIOS/Service Tag jest odzyskiwalny; brak odczytu uruchamia ręczne wpisanie identyfikatora.
 
+- [x] Ujednolicić nazwę modelu dla różnych producentów.
+  - Pobierać `Model`, `SystemFamily` i `SystemSKUNumber` z `Win32_ComputerSystem`, z danymi produktu i rejestru jako źródłami awaryjnymi.
+  - Nie powtarzać `SystemFamily`, jeśli jest już zawarte w `Model`, np. `Latitude 5421`.
+  - Dla różnych wartości używać formatu `SystemFamily (Model)`, np. `Yoga Slim 7 15ILL9 (83HM)`.
+  - Dokładnie tą nazwą wyszukiwać istniejący wpis JSON i zapisywać pole PHP `model`.
+  - Każdą propozycję nowego modelu oraz kompletny nowy wpis JSON zatwierdza użytkownik.
+
 - [x] Odczytywać rzeczywiste dane płyty głównej z `Win32_BaseBoard`.
   - Zebrać `Manufacturer`, `Product`, `Version` i `SerialNumber`.
   - Wyświetlić kod płyty użytkownikowi podczas weryfikacji.
