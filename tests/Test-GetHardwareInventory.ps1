@@ -622,6 +622,24 @@ try {
     Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'Updating memorySpec should never replace the verified maximum with SMBIOS MaxCapacityEx.'
     Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
+    $script:MockReadHostQueue.Enqueue('Latitude 7420 fallback test')
+    $script:MockReadHostQueue.Enqueue('DDR4 3200MHz x2, max64GB')
+    $script:MockReadHostQueue.Enqueue('90')
+    $script:MockReadHostQueue.Enqueue('55')
+    $script:MockReadHostQueue.Enqueue('zasilacz USB-C test')
+    $script:MockReadHostQueue.Enqueue('laptop')
+    $script:MockReadHostQueue.Enqueue('1')
+    $EditedModelInput = Read-ExistingModelDatabaseEntry -ModelEntry $UpdatedModel
+    $EditedModel = Update-ModelDatabaseEntry -DatabasePath $TestModelDatabase -Entry $EditedModelInput
+    Assert-True -Condition ($EditedModel.model -eq 'Latitude 7420') -Message 'Editing a known model should preserve its lookup key.'
+    Assert-True -Condition ($EditedModel.baseboardFallback -eq 'Latitude 7420 fallback test') -Message 'Editing should update baseboardFallback.'
+    Assert-True -Condition ($EditedModel.memorySpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'Editing should update a complete memorySpec.'
+    Assert-True -Condition ($EditedModel.powerMaxW -eq 90 -and $EditedModel.powerW -eq 55) -Message 'Editing should update both power values.'
+    Assert-True -Condition ($EditedModel.other -eq 'zasilacz USB-C test') -Message 'Editing should update other.'
+    Assert-True -Condition ($EditedModel.deviceType -eq 'laptop') -Message 'Editing should update deviceType.'
+    $ModelsAfterEdit = @(Import-ModelDatabase -Path $TestModelDatabase)
+    Assert-True -Condition ($ModelsAfterEdit.Count -eq $Models.Count) -Message 'Editing a known model should not add or remove database entries.'
+
     $script:MockReadHostQueue.Enqueue('1')
     $script:MockReadHostQueue.Enqueue('64')
     $script:MockReadHostQueue.Enqueue('130')

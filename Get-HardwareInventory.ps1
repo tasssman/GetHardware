@@ -336,6 +336,87 @@ function Add-ModelDatabaseEntry {
     return $VerifiedMatches[0]
 }
 
+function Update-ModelDatabaseEntry {
+    param(
+        [Parameter(Mandatory)][string]$DatabasePath,
+        [Parameter(Mandatory)][psobject]$Entry
+    )
+
+    $Models = @(Import-ModelDatabase -Path $DatabasePath)
+    $Matches = @($Models | Where-Object { ([string]$_.model).Trim() -ieq ([string]$Entry.model).Trim() })
+    if ($Matches.Count -ne 1) {
+        throw "Nie można zaktualizować modelu '$($Entry.model)', ponieważ nie występuje w bazie dokładnie jeden raz."
+    }
+
+    $Match = $Matches[0]
+    $Match.baseboardFallback = ([string]$Entry.baseboardFallback).Trim()
+    $Match.memorySpec = ([string]$Entry.memorySpec).Trim()
+    $Match.powerMaxW = [int]$Entry.powerMaxW
+    $Match.powerW = [int]$Entry.powerW
+    $Match.other = ([string]$Entry.other).Trim()
+    $Match.deviceType = ([string]$Entry.deviceType).Trim().ToLowerInvariant()
+
+    Write-ModelDatabase -Path $DatabasePath -Models $Models
+    $VerifiedModels = @(Import-ModelDatabase -Path $DatabasePath)
+    $VerifiedMatches = @($VerifiedModels | Where-Object { ([string]$_.model).Trim() -ieq ([string]$Entry.model).Trim() })
+    if ($VerifiedMatches.Count -ne 1) {
+        throw "Nie udało się zweryfikować aktualizacji modelu '$($Entry.model)' w bazie."
+    }
+    return $VerifiedMatches[0]
+}
+
+function Read-ExistingModelDatabaseEntry {
+    param([Parameter(Mandatory)][psobject]$ModelEntry)
+
+    $BaseBoardFallback = ([string]$ModelEntry.baseboardFallback).Trim()
+    $MemorySpec = ([string]$ModelEntry.memorySpec).Trim()
+    $PowerMax = [int]$ModelEntry.powerMaxW
+    $Power = [int]$ModelEntry.powerW
+    $Other = ([string]$ModelEntry.other).Trim()
+    $DeviceType = ([string]$ModelEntry.deviceType).Trim().ToLowerInvariant()
+
+    while ($true) {
+        Write-Section -Title 'Edycja wpisu modelu'
+        Write-Host "Model: $($ModelEntry.model)" -ForegroundColor DarkGray
+        Write-Host 'Naciśnij Enter, aby zachować wartość pokazaną w nawiasach.' -ForegroundColor DarkGray
+
+        $BaseBoardFallback = Read-TextValue -Prompt 'Awaryjny opis płyty — baseboardFallback' -Default $BaseBoardFallback
+        while ($true) {
+            $MemorySpec = Read-TextValue -Prompt 'Konfiguracja pamięci — memorySpec' -Default $MemorySpec
+            if (Test-MemorySpecHasMaximum -Value $MemorySpec) { break }
+            Write-Warning 'Pole memorySpec musi zawierać maksymalną pojemność, np. max64GB.'
+        }
+        $PowerMax = Read-NonNegativeInteger -Prompt 'Maksymalna moc zasilacza — powerMaxW [W]' -Default $PowerMax
+        $Power = Read-NonNegativeInteger -Prompt 'Pobór mocy — powerW [W]' -Default $Power
+        $Other = Read-TextValue -Prompt 'Dodatkowe informacje — other (opcjonalnie)' -Default $Other -AllowEmpty
+
+        while ($true) {
+            $DeviceType = (Read-TextValue -Prompt 'Typ urządzenia — deviceType' -Default $DeviceType).Trim().ToLowerInvariant()
+            if ($DeviceType -in @('laptop', 'tablet', 'desktop', 'server', 'storage')) { break }
+            Write-Warning 'Dozwolone typy: laptop, tablet, desktop, server, storage.'
+        }
+
+        $EditedEntry = [pscustomobject][ordered]@{
+            model             = ([string]$ModelEntry.model).Trim()
+            baseboardFallback = $BaseBoardFallback
+            memorySpec        = $MemorySpec
+            powerMaxW         = $PowerMax
+            powerW            = $Power
+            other             = $Other
+            deviceType        = $DeviceType
+        }
+
+        Write-Section -Title 'Podsumowanie zmian wpisu'
+        Write-Host (ConvertTo-Json -InputObject $EditedEntry -Depth 4)
+        Write-Host '[1] Zapisz zmiany w hardware-models.json'
+        Write-Host '[2] Popraw wartości'
+        Write-Host '[3] Odrzuć zmiany i wróć'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-3]' -Minimum 1 -Maximum 3
+        if ($Choice -eq 1) { return $EditedEntry }
+        if ($Choice -eq 3) { return $null }
+    }
+}
+
 function Read-DeviceTypeForNewModel {
     param([AllowNull()][string]$DetectedDeviceType)
 
@@ -931,6 +1012,60 @@ function Resolve-MainboardDescription {
     return Join-MainboardDescription `
         -BaseBoardDescription $BaseBoardDescription `
         -MemorySpec $MemorySpec
+}
+
+function Show-ResolvedModelEntry {
+    param(
+        [Parameter(Mandatory)][psobject]$ModelEntry,
+        [Parameter(Mandatory)][string]$ResolvedDeviceType,
+        [Parameter(Mandatory)][string]$ResolvedMemorySpec,
+        [Parameter(Mandatory)][string]$ResolvedMainboard,
+        [Parameter(Mandatory)][psobject]$System
+    )
+
+    $DetectedBaseBoard = 'brak danych'
+    if (Test-BaseBoardProduct -Value $System.BaseBoardProduct) {
+        $BaseBoardSegments = New-Object System.Collections.Generic.List[string]
+        foreach ($Value in @($System.BaseBoardManufacturer, $System.BaseBoardProduct, $System.BaseBoardVersion)) {
+            $Normalized = ([string]$Value).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($Normalized) -and $Normalized -notin $BaseBoardSegments) {
+                $BaseBoardSegments.Add($Normalized)
+            }
+        }
+        if ($BaseBoardSegments.Count -gt 0) {
+            $DetectedBaseBoard = $BaseBoardSegments -join ' '
+        }
+    }
+
+    $Other = ([string]$ModelEntry.other).Trim()
+    if ([string]::IsNullOrWhiteSpace($Other)) { $Other = 'brak' }
+
+    $PowerMax = ([string]$ModelEntry.powerMaxW).Trim()
+    if ([string]::IsNullOrWhiteSpace($PowerMax)) { $PowerMax = 'brak' } else { $PowerMax += ' W' }
+
+    $Power = ([string]$ModelEntry.powerW).Trim()
+    if ([string]::IsNullOrWhiteSpace($Power)) { $Power = 'brak' } else { $Power += ' W' }
+
+    Write-Section -Title 'Model znaleziony w bazie'
+    Write-Host "Model w JSON:             $(([string]$ModelEntry.model).Trim())" -ForegroundColor Green
+    Write-Host "Typ urządzenia:           $ResolvedDeviceType"
+    Write-Host "Konfiguracja pamięci:     $ResolvedMemorySpec"
+    Write-Host "Awaryjny opis płyty:      $(([string]$ModelEntry.baseboardFallback).Trim())"
+    Write-Host "Maksymalna moc:           $PowerMax"
+    Write-Host "Pobór mocy:               $Power"
+    Write-Host "Dodatkowe informacje:     $Other"
+    Write-Host ''
+    Write-Host "Wykryta płyta główna:     $DetectedBaseBoard"
+    Write-Host "Opis mainb użyty w PHP:   $ResolvedMainboard" -ForegroundColor Green
+}
+
+function Read-ResolvedModelEntryAction {
+    Write-Host ''
+    Write-Host 'Czy wpis w bazie jest poprawny?'
+    Write-Host '[1] Tak — kontynuuj'
+    Write-Host '[2] Edytuj wpis w JSON'
+    Write-Host '[3] Anuluj'
+    return Read-MenuChoice -Prompt 'Wybierz operację [1-3]' -Minimum 1 -Maximum 3
 }
 
 function Convert-EdidText {
@@ -3245,20 +3380,41 @@ function Invoke-HardwareInventory {
         -DetectedDeviceType $System.DetectedDeviceType `
         -SystemIdentity $System
     $ResolvedModel = ([string]$ModelEntry.model).Trim()
-    $ResolvedDeviceType = Resolve-DeviceType `
-        -DatabaseDeviceType ([string]$ModelEntry.deviceType) `
-        -DetectedDeviceType $System.DetectedDeviceType `
-        -ChassisDescription $System.ChassisDescription
-    $MemorySpec = Resolve-MemorySpec `
-        -ModelEntry $ModelEntry `
-        -MemoryInventory $MemoryInventory `
-        -DatabasePath $ModelDatabasePath
-    $Mainboard = Resolve-MainboardDescription `
-        -ModelEntry $ModelEntry `
-        -MemorySpec $MemorySpec `
-        -Manufacturer $System.BaseBoardManufacturer `
-        -Product $System.BaseBoardProduct `
-        -Version $System.BaseBoardVersion
+    while ($true) {
+        $ResolvedDeviceType = Resolve-DeviceType `
+            -DatabaseDeviceType ([string]$ModelEntry.deviceType) `
+            -DetectedDeviceType $System.DetectedDeviceType `
+            -ChassisDescription $System.ChassisDescription
+        $MemorySpec = Resolve-MemorySpec `
+            -ModelEntry $ModelEntry `
+            -MemoryInventory $MemoryInventory `
+            -DatabasePath $ModelDatabasePath
+        $Mainboard = Resolve-MainboardDescription `
+            -ModelEntry $ModelEntry `
+            -MemorySpec $MemorySpec `
+            -Manufacturer $System.BaseBoardManufacturer `
+            -Product $System.BaseBoardProduct `
+            -Version $System.BaseBoardVersion
+
+        Show-ResolvedModelEntry `
+            -ModelEntry $ModelEntry `
+            -ResolvedDeviceType $ResolvedDeviceType `
+            -ResolvedMemorySpec $MemorySpec `
+            -ResolvedMainboard $Mainboard `
+            -System $System
+
+        $ModelEntryAction = Read-ResolvedModelEntryAction
+        if ($ModelEntryAction -eq 1) { break }
+        if ($ModelEntryAction -eq 3) {
+            throw [OperationCanceledException]::new('Anulowano po weryfikacji wpisu modelu.')
+        }
+
+        $EditedModelEntry = Read-ExistingModelDatabaseEntry -ModelEntry $ModelEntry
+        if ($null -ne $EditedModelEntry) {
+            $ModelEntry = Update-ModelDatabaseEntry -DatabasePath $ModelDatabasePath -Entry $EditedModelEntry
+            Write-Host "Zaktualizowano model '$($ModelEntry.model)' w hardware-models.json." -ForegroundColor Green
+        }
+    }
 
     while ($true) {
         $Collection = Select-Collection -Root $OutputRoot
