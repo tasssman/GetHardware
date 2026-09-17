@@ -644,7 +644,7 @@ function Get-DellSupportUrl {
     return "https://www.dell.com/support/home/en-us/product-support/servicetag/$EncodedServiceTag/overview"
 }
 
-function Open-DellSupportPage {
+function Show-DellSupportPage {
     param(
         [AllowNull()][string]$Manufacturer,
         [Parameter(Mandatory)][string]$ServiceTag
@@ -657,13 +657,6 @@ function Open-DellSupportPage {
 
     Write-Section -Title 'Wsparcie Dell'
     Write-Host "Strona urządzenia: $Url"
-    try {
-        Start-Process -FilePath $Url -ErrorAction Stop
-        Write-Host 'Otwarto stronę w domyślnej przeglądarce.' -ForegroundColor Green
-    }
-    catch {
-        Write-Warning "Nie udało się otworzyć domyślnej przeglądarki. Skopiuj powyższy adres ręcznie. Szczegóły: $($_.Exception.Message)"
-    }
 }
 
 function Get-ProcessorClockSpeedMhz {
@@ -3473,7 +3466,7 @@ function Invoke-HardwareInventory {
     }
 
     $ServiceTag = Resolve-ServiceTag -DetectedValue $System.ServiceTag
-    Open-DellSupportPage -Manufacturer $System.Manufacturer -ServiceTag $ServiceTag
+    Show-DellSupportPage -Manufacturer $System.Manufacturer -ServiceTag $ServiceTag
     Write-Host "Model systemowy: $($System.SystemModel)"
     Write-Host "Rodzina systemu: $($System.SystemFamily)"
     Write-Host "Model używany do wyszukania w bazie: $($System.Model)" -ForegroundColor Green

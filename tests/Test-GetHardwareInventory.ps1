@@ -30,6 +30,9 @@ Assert-True -Condition (-not (Test-ServiceTag -Value 'To be filled by O.E.M.')) 
 $DellSupportUrl = Get-DellSupportUrl -Manufacturer 'Dell Inc.' -ServiceTag '13qj7d3'
 Assert-True -Condition ($DellSupportUrl -eq 'https://www.dell.com/support/home/en-us/product-support/servicetag/13QJ7D3/overview') -Message 'A Dell device should receive a normalized support URL.'
 Assert-True -Condition ([string]::IsNullOrWhiteSpace((Get-DellSupportUrl -Manufacturer 'Lenovo' -ServiceTag '13QJ7D3'))) -Message 'A non-Dell device should not receive a Dell support URL.'
+$InventoryScript = Get-Content -LiteralPath (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1') -Raw
+Assert-True -Condition ($InventoryScript -notmatch '\bStart-Process\b') -Message 'The inventory script should not open the Dell support page automatically.'
+Assert-True -Condition ($null -ne (Get-Command Show-DellSupportPage -ErrorAction SilentlyContinue)) -Message 'The Dell support URL should still be available for display in the console.'
 
 # Regression test for Windows PowerShell 5.1: @($list) fails for a generic
 # List[object] containing PSCustomObject, so production code must use ToArray().

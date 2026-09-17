@@ -22,7 +22,7 @@ Dokument zawiera uzgodnione wymagania dla nowej wersji skryptu. Będzie uzupełn
 - Model komputera jest budowany z `SystemFamily` i `Model`: powtórzona rodzina nie jest dodawana drugi raz, a różny kod modelu jest umieszczany w nawiasie.
 - Do pustych lub zastępczych danych identyfikacyjnych można użyć odpowiadających wartości z `Win32_ComputerSystemProduct` i rejestru systemowego; nie wykonuje się dopasowania przybliżonego do wpisów bazy.
 - Etykietę systemu można wybrać jako `W10P` lub `W11P`, a także wpisać własną niepustą wartość.
-- Po ustaleniu Service Tagu urządzenia Dell skrypt pokazuje adres jego strony wsparcia i otwiera ją w domyślnej przeglądarce. Nieudane otwarcie nie zatrzymuje inwentaryzacji.
+- Po ustaleniu Service Tagu urządzenia Dell skrypt pokazuje adres jego strony wsparcia, ale nie otwiera automatycznie przeglądarki.
 - Strona wsparcia Dell ani jej komentarz w PHP nie są generowane dla urządzeń innych producentów.
 
 ## Baza modeli

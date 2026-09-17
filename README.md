@@ -43,7 +43,7 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 1. Potwierdzenie odłączenia dodatkowych monitorów, sesji pulpitu zdalnego, stacji dokujących i zewnętrznych urządzeń USB.
 2. Odczyt modelu, Service Tagu, procesora, płyty głównej i pozostałych podzespołów.
-3. Dla urządzenia Dell wyświetlenie adresu strony wsparcia i otwarcie jej w domyślnej przeglądarce.
+3. Dla urządzenia Dell wyświetlenie adresu strony wsparcia bez automatycznego otwierania przeglądarki.
 4. Sprawdzenie modelu w `hardware-models.json`.
 5. Wybór istniejącego spisu albo utworzenie nowego.
 6. Odczyt wspólnego pola `bought` z istniejącego spisu albo pytanie o nie dla nowego spisu.
