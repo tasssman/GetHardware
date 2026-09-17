@@ -13,27 +13,13 @@ Aktualna wersja skryptu: `v1.0.0`. Numer wersji jest wyświetlany jako pierwszy 
 
 ## Uruchomienie
 
-Na inwentaryzowanym laptopie otwórz Windows PowerShell. Jeżeli wykonywanie skryptów jest wyłączone, zezwól na nie wyłącznie w bieżącym oknie PowerShell:
+Na inwentaryzowanym laptopie otwórz Windows PowerShell i wklej poniższe polecenie w jednej linii. Zastąp `DOMENA\uzytkownik` właściwą nazwą konta domenowego:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $Credential=Get-Credential -Message 'Podaj konto domenowe' -UserName 'DOMENA\uzytkownik'; New-PSDrive -Name GH -PSProvider FileSystem -Root '\\ntshare\helpdesk\scripts\GetHardware' -Credential $Credential -ErrorAction Stop | Out-Null; try { & 'GH:\Get-HardwareInventory.ps1' } finally { Remove-PSDrive -Name GH -Force -ErrorAction SilentlyContinue }
 ```
 
-Polecenie nie zmienia trwale polityki komputera. Ustawienie znika po zamknięciu tego okna PowerShell.
-
-Komputer jest obsługiwany przez użytkownika spoza domeny, dlatego podaj konto domenowe, utwórz tymczasowy dysk `GH:` prowadzący do katalogu sieciowego i uruchom skrypt poniższym poleceniem w jednej linii. Zastąp `DOMENA\uzytkownik` właściwą nazwą konta:
-
-```powershell
-$Credential=Get-Credential -Message 'Podaj konto domenowe' -UserName 'DOMENA\uzytkownik'; New-PSDrive -Name GH -PSProvider FileSystem -Root '\\ntshare\helpdesk\scripts\GetHardware' -Credential $Credential | Out-Null; Set-Location 'GH:\'; .\Get-HardwareInventory.ps1
-```
-
-Hasło jest podawane w bezpiecznym oknie i nie należy wpisywać go bezpośrednio w poleceniu. Skrypt oraz pliki bazy są odczytywane z udziału sieciowego, a wyniki trafiają do `\\ntshare\helpdesk\scripts\GetHardware\output`.
-
-Po zakończeniu pracy można odłączyć tymczasowy dysk:
-
-```powershell
-Set-Location 'C:\'; Remove-PSDrive -Name GH
-```
+Polecenie zezwala na wykonywanie skryptów wyłącznie w bieżącym oknie PowerShell, bez trwałej zmiany polityki komputera. Hasło jest podawane w bezpiecznym oknie i nie należy wpisywać go bezpośrednio w poleceniu. Skrypt oraz pliki bazy są odczytywane z udziału sieciowego, wyniki trafiają do `\\ntshare\helpdesk\scripts\GetHardware\output`, a tymczasowy dysk `GH:` jest automatycznie odłączany po zakończeniu pracy.
 
 Jeśli `MachinePolicy` albo `UserPolicy` widoczne w `Get-ExecutionPolicy -List` są wymuszone administracyjnie, ustawienie dla zakresu `Process` może ich nie zastąpić. W takim przypadku potrzebny jest podpisany skrypt albo zmiana polityki przez administratora.
 
