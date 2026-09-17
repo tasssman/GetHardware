@@ -383,8 +383,8 @@ function Read-ExistingModelDatabaseEntry {
         $BaseBoardFallback = Read-TextValue -Prompt 'Awaryjny opis płyty — baseboardFallback' -Default $BaseBoardFallback
         while ($true) {
             $MemorySpec = Read-TextValue -Prompt 'Konfiguracja pamięci — memorySpec' -Default $MemorySpec
-            if (Test-MemorySpecHasMaximum -Value $MemorySpec) { break }
-            Write-Warning 'Pole memorySpec musi zawierać maksymalną pojemność, np. max64GB.'
+            if (Test-MemorySpecIsComplete -Value $MemorySpec) { break }
+            Write-Warning 'Pole memorySpec musi zawierać max...GB albo oznaczenie soldered dla pamięci wlutowanej.'
         }
         $PowerMax = Read-NonNegativeInteger -Prompt 'Maksymalna moc zasilacza — powerMaxW [W]' -Default $PowerMax
         $Power = Read-NonNegativeInteger -Prompt 'Pobór mocy — powerW [W]' -Default $Power
@@ -475,6 +475,10 @@ function Read-MemorySpecForNewModel {
     }
 
     Write-Host "Wykryta konfiguracja pamięci: $DetectedSpec" -ForegroundColor Green
+    if ($DetectedSpec -match '(?i)\bsoldered\b') {
+        Write-Host 'Pamięć wlutowana nie wymaga dopisywania max...GB do memorySpec.' -ForegroundColor DarkGray
+        return $DetectedSpec
+    }
     Write-Host 'Maksimum podawane przez SMBIOS nie jest używane, ponieważ może być limitem kontrolera, a nie konkretnego modelu.' -ForegroundColor DarkGray
     while ($true) {
         $Maximum = Read-TextValue -Prompt 'Maksymalna obsługiwana pamięć w GB (sprawdź w dokumentacji producenta)' -Default $null
@@ -1917,6 +1921,82 @@ function Test-LocallyAdministeredMacAddress {
     return ($FirstOctet -band 2) -ne 0
 }
 
+function Get-NetworkAdapterPnpDeviceId {
+    param([Parameter(Mandatory)][psobject]$Adapter)
+
+    $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PnPDeviceID')).Trim()
+    if ([string]::IsNullOrWhiteSpace($PnpDeviceId)) {
+        $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PNPDeviceID')).Trim()
+    }
+    return $PnpDeviceId
+}
+
+function Get-NetworkAdapterSelectionScore {
+    param([Parameter(Mandatory)][psobject]$Adapter)
+
+    $Score = 0
+    $Name = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Name')).Trim()
+    $Status = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Status')).Trim()
+    $PermanentAddress = Get-NormalizedMacAddress -Value ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PermanentAddress'))
+
+    # Windows potrafi zwrócić kilka historycznych lub pomocniczych interfejsów
+    # dla jednego urządzenia Wi-Fi. Główny interfejs ma zwykle nazwę „Wi-Fi”.
+    if ($Name -ieq 'Wi-Fi') { $Score += 1000 }
+    elseif ($Name -notmatch '\s+\d+$') { $Score += 100 }
+
+    if ($Status -ine 'Not Present') { $Score += 100 }
+    if (-not [string]::IsNullOrWhiteSpace($PermanentAddress)) {
+        $Score += 40
+        if (-not (Test-LocallyAdministeredMacAddress -Value $PermanentAddress)) { $Score += 20 }
+    }
+    if ((Get-OptionalPropertyValue -InputObject $Adapter -Name 'ConnectorPresent') -eq $true) { $Score += 10 }
+    return $Score
+}
+
+function Select-UniqueNetworkAdapters {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Adapters)
+
+    $Groups = [ordered]@{}
+    for ($Index = 0; $Index -lt $Adapters.Count; $Index++) {
+        $Adapter = $Adapters[$Index]
+        $PnpDeviceId = Get-NetworkAdapterPnpDeviceId -Adapter $Adapter
+        $Key = if ([string]::IsNullOrWhiteSpace($PnpDeviceId)) {
+            "UNIQUE:$Index"
+        }
+        else {
+            "PNP:$($PnpDeviceId.ToUpperInvariant())"
+        }
+        if (-not $Groups.Contains($Key)) {
+            $Groups[$Key] = New-Object System.Collections.Generic.List[object]
+        }
+        $Groups[$Key].Add($Adapter)
+    }
+
+    $Selected = New-Object System.Collections.Generic.List[object]
+    foreach ($Key in $Groups.Keys) {
+        $Group = $Groups[$Key].ToArray()
+        if ($Group.Count -eq 1) {
+            $Selected.Add($Group[0])
+            continue
+        }
+
+        $Best = @(
+            for ($Index = 0; $Index -lt $Group.Count; $Index++) {
+                [pscustomobject]@{
+                    Adapter = $Group[$Index]
+                    Score   = Get-NetworkAdapterSelectionScore -Adapter $Group[$Index]
+                    Index   = $Index
+                }
+            }
+        ) | Sort-Object -Property @{ Expression = 'Score'; Descending = $true }, @{ Expression = 'Index'; Descending = $false } | Select-Object -First 1
+
+        $Selected.Add($Best.Adapter)
+        $Description = ([string](Get-OptionalPropertyValue -InputObject $Best.Adapter -Name 'InterfaceDescription')).Trim()
+        Write-Host "Liczba scalonych interfejsów urządzenia '$Description' o wspólnym PnPDeviceID: $($Group.Count)." -ForegroundColor DarkGray
+    }
+    return $Selected.ToArray()
+}
+
 function Get-NetworkAdapterDecision {
     param([Parameter(Mandatory)][psobject]$Adapter)
 
@@ -1925,10 +2005,7 @@ function Get-NetworkAdapterDecision {
         [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Description')
         [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Name')
     ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1).Trim()
-    $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PnPDeviceID')).Trim()
-    if ([string]::IsNullOrWhiteSpace($PnpDeviceId)) {
-        $PnpDeviceId = ([string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PNPDeviceID')).Trim()
-    }
+    $PnpDeviceId = Get-NetworkAdapterPnpDeviceId -Adapter $Adapter
     $PhysicalMediaType = [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PhysicalMediaType')
     $HardwareInterface = Get-OptionalPropertyValue -InputObject $Adapter -Name 'HardwareInterface'
     if ($null -eq $HardwareInterface) {
@@ -2012,7 +2089,7 @@ function Get-NetworkInventoryParts {
         }
     }
 
-    foreach ($Adapter in $Adapters) {
+    foreach ($Adapter in @(Select-UniqueNetworkAdapters -Adapters $Adapters)) {
         try {
             $Part = ConvertTo-NetworkAdapterPart -Adapter $Adapter
             if ($null -ne $Part) { $Parts.Add($Part) }
@@ -2402,7 +2479,14 @@ function Get-MemoryPlacement {
     if ($Locator -match '(?i)motherboard|system\s*board|on\s*board|onboard|solder') {
         return 'soldered'
     }
-    if ([int]$Memory.FormFactor -in @(8, 12) -or $Locator -match '(?i)\bSO-?DIMM\b|\bDIMM\b|\bslot\b') {
+    $SmbiosMemoryType = [int]$Memory.SMBIOSMemoryType
+    $FormFactor = [int]$Memory.FormFactor
+    if ($SmbiosMemoryType -in @(27, 28, 29, 30, 35) -and
+        $FormFactor -eq 0 -and
+        $Locator -match '(?i)\bController\d+\s*-\s*Channel[A-Z0-9]+\b') {
+        return 'soldered'
+    }
+    if ($FormFactor -in @(8, 12) -or $Locator -match '(?i)\bSO-?DIMM\b|\bDIMM\b|\bslot\b') {
         return 'slot'
     }
     return 'unknown'
@@ -2552,6 +2636,13 @@ function Test-MemorySpecHasMaximum {
     return -not [string]::IsNullOrWhiteSpace((Get-MemorySpecMaximumText -Value $Value))
 }
 
+function Test-MemorySpecIsComplete {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return (Test-MemorySpecHasMaximum -Value $Value) -or $Value.Trim() -match '(?i)\bsoldered\b'
+}
+
 function Read-CompleteMemorySpec {
     param(
         [Parameter(Mandatory)][string]$Model,
@@ -2559,9 +2650,10 @@ function Read-CompleteMemorySpec {
     )
 
     while ($true) {
-        $Value = Read-TextValue -Prompt 'Wpisz pełną konfigurację pamięci, łącznie z maksymalną pojemnością (np. DDR4 3200MHz x2, max64GB)' -Default $null
-        if (Test-MemorySpecHasMaximum -Value $Value) { return $Value.Trim() }
-        Write-Warning "Pole memorySpec dla modelu '$Model' musi zawierać maksymalną pojemność w formacie max...GB, np. max64GB."
+        $Default = if (Test-MemorySpecIsComplete -Value $DetectedSpec) { $DetectedSpec } else { $null }
+        $Value = Read-TextValue -Prompt 'Wpisz pełną konfigurację pamięci (np. DDR4 3200MHz x2, max64GB albo LPDDR5 8533MHz soldered)' -Default $Default
+        if (Test-MemorySpecIsComplete -Value $Value) { return $Value.Trim() }
+        Write-Warning "Pole memorySpec dla modelu '$Model' musi zawierać max...GB albo oznaczenie soldered dla pamięci wlutowanej."
         if (-not [string]::IsNullOrWhiteSpace($DetectedSpec)) {
             Write-Host "Dane wykryte automatycznie: $DetectedSpec" -ForegroundColor DarkGray
         }
@@ -2596,16 +2688,16 @@ function Resolve-MemorySpec {
     $DetectedBaseSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
     $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedBaseSpec)
 
-    if (-not (Test-MemorySpecHasMaximum -Value $DatabaseSpec)) {
+    if (-not (Test-MemorySpecIsComplete -Value $DatabaseSpec)) {
         Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
-        Write-Warning "Pole memorySpec dla modelu '$($ModelEntry.model)' nie zawiera maksymalnej obsługiwanej pamięci."
+        Write-Warning "Pole memorySpec dla modelu '$($ModelEntry.model)' nie zawiera max...GB ani oznaczenia soldered."
         if ($DetectedReliable) {
             Write-Host "Dane wykryte automatycznie: $DetectedBaseSpec" -ForegroundColor Green
         }
         else {
             Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory
         }
-        Write-Host 'Uzupełnij pełną specyfikację na podstawie dokumentacji producenta, np. DDR4 3200MHz x2, max64GB.'
+        Write-Host 'Uzupełnij pełną specyfikację, np. DDR4 3200MHz x2, max64GB albo LPDDR5 8533MHz soldered.'
         $CustomSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
         Write-Host '[1] Zapisz tę wartość w JSON'
         Write-Host '[2] Użyj jej tylko dla tego komputera'
@@ -2618,7 +2710,15 @@ function Resolve-MemorySpec {
     }
 
     $MaximumText = Get-MemorySpecMaximumText -Value $DatabaseSpec
-    $DetectedSpec = if ($DetectedReliable) { "$DetectedBaseSpec, $MaximumText" } else { '' }
+    $DetectedSpec = ''
+    if ($DetectedReliable) {
+        if ($DetectedBaseSpec -match '(?i)\bsoldered\b') {
+            $DetectedSpec = $DetectedBaseSpec
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($MaximumText)) {
+            $DetectedSpec = "$DetectedBaseSpec, $MaximumText"
+        }
+    }
 
     if ($DetectedReliable -and
         (Get-NormalizedMemorySpec -Value $DetectedSpec) -eq (Get-NormalizedMemorySpec -Value $DatabaseSpec)) {
@@ -2626,7 +2726,7 @@ function Resolve-MemorySpec {
     }
 
     Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
-    if ($DetectedReliable) {
+    if ($DetectedReliable -and -not [string]::IsNullOrWhiteSpace($DetectedSpec)) {
         Write-Host "Wykryta konfiguracja: $DetectedSpec" -ForegroundColor Green
         Write-Host "Wartość w JSON:       $DatabaseSpec"
         Write-Host '[1] Użyj wykrytej wartości i zapisz ją w JSON'
@@ -2646,6 +2746,11 @@ function Resolve-MemorySpec {
                 $CustomSpec = Read-TextValue -Prompt 'Wpisz konfigurację pamięci dla pola mainb' -Default $DetectedSpec
             }
         }
+    }
+    elseif ($DetectedReliable) {
+        Write-Host "Wykryta konfiguracja: $DetectedBaseSpec" -ForegroundColor Green
+        Write-Host "Wartość w JSON:       $DatabaseSpec"
+        $CustomSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
     }
     else {
         Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory

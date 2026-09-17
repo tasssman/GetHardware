@@ -123,7 +123,9 @@ function Get-NetAdapter {
     param([string]$Name, [switch]$IncludeHidden, $ErrorAction)
     return @(
         [pscustomobject]@{ Name = 'Ethernet'; InterfaceDescription = 'Intel(R) Ethernet Connection (14) I219-LM'; PermanentAddress = 'A0291926DE3D'; MacAddress = 'A0-29-19-26-DE-3D'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = '802.3'; PnPDeviceID = 'PCI\VEN_8086&DEV_15F9' }
-        [pscustomobject]@{ Name = 'Wi-Fi'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz'; PermanentAddress = 'AC74B13CDD18'; MacAddress = 'AC-74-B1-3C-DD-18'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = 'PCI\VEN_8086&DEV_43F0' }
+        [pscustomobject]@{ Name = 'Wi-Fi'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz'; Status = 'Disconnected'; PermanentAddress = 'AC74B13CDD18'; MacAddress = 'AC-74-B1-3C-DD-18'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = 'PCI\VEN_8086&DEV_43F0' }
+        [pscustomobject]@{ Name = 'Wi-Fi 3'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz'; Status = 'Disconnected'; PermanentAddress = 'AC74B13CDD19'; MacAddress = 'AC-74-B1-3C-DD-19'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = 'PCI\VEN_8086&DEV_43F0' }
+        [pscustomobject]@{ Name = 'Wi-Fi 5'; InterfaceDescription = 'Intel(R) Wi-Fi 6 AX201 160MHz'; Status = 'Disconnected'; PermanentAddress = 'AE74B13CDD18'; MacAddress = 'AE-74-B1-3C-DD-18'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = 'Native 802.11'; PnPDeviceID = 'PCI\VEN_8086&DEV_43F0' }
         [pscustomobject]@{ Name = 'Bluetooth Network Connection'; InterfaceDescription = 'Bluetooth Device (Personal Area Network)'; PermanentAddress = 'AC74B13CDD1C'; MacAddress = 'AC-74-B1-3C-DD-1C'; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'BlueTooth'; PnPDeviceID = 'BTH\MS_BTHPAN' }
         [pscustomobject]@{ Name = 'Ethernet 3'; InterfaceDescription = 'Realtek USB GbE Family Controller'; PermanentAddress = 'C03EBA333E88'; MacAddress = 'C0-3E-BA-33-3E-88'; HardwareInterface = $true; Virtual = $false; ConnectorPresent = $true; PhysicalMediaType = '802.3'; PnPDeviceID = 'USB\VID_0BDA&PID_8153' }
         [pscustomobject]@{ Name = 'Ethernet 2'; InterfaceDescription = 'Cisco AnyConnect Virtual Miniport Adapter for Windows x64'; PermanentAddress = '00059A3C7A00'; MacAddress = '00-05-9A-3C-7A-00'; HardwareInterface = $false; Virtual = $true; ConnectorPresent = $false; PhysicalMediaType = 'Unspecified'; PnPDeviceID = 'ROOT\NET\0000' }
@@ -353,6 +355,35 @@ Assert-True -Condition ($SolderedMemory.Parts[0].Conn -eq 'soldered') -Message '
 Assert-True -Condition ($SolderedMemory.Parts[0].Sn -eq '') -Message 'Placeholder RAM serial numbers should be discarded.'
 Assert-True -Condition ($SolderedMemory.DetectedSpec -eq 'LPDDR4 4267MHz soldered') -Message 'Soldered memorySpec should not treat memory devices as slots or trust SMBIOS maximum capacity.'
 
+$LenovoSolderedDevices = @(
+    for ($Controller = 0; $Controller -lt 2; $Controller++) {
+        foreach ($Channel in @('A', 'B', 'C', 'D')) {
+            [pscustomobject]@{
+                Capacity             = 2GB
+                Speed                = 8533
+                ConfiguredClockSpeed = 8533
+                SMBIOSMemoryType     = 35
+                FormFactor           = 0
+                DeviceLocator        = "Controller$Controller-Channel$Channel"
+                BankLabel            = "BANK $([array]::IndexOf(@('A', 'B', 'C', 'D'), $Channel))"
+                Manufacturer         = 'Samsung'
+                PartNumber           = ''
+                SerialNumber         = '20000000'
+            }
+        }
+    }
+)
+$LenovoSolderedMemory = ConvertTo-MemoryInventory `
+    -MemoryDevices $LenovoSolderedDevices `
+    -MemoryArrays @(
+        [pscustomobject]@{ MemoryDevices = 8; MaxCapacity = 16777216; MaxCapacityEx = 16777216; Location = 3; Use = 3 }
+    )
+Assert-True -Condition ($LenovoSolderedMemory.Parts.Count -eq 1) -Message 'Lenovo controller-channel LPDDR records should be grouped into one PHP part.'
+Assert-True -Condition ($LenovoSolderedMemory.Parts[0].Desc -eq '16GB 8533MHz LPDDR5') -Message 'Grouped Lenovo LPDDR5 should contain its total installed capacity and rated speed.'
+Assert-True -Condition ($LenovoSolderedMemory.Parts[0].Conn -eq 'soldered') -Message 'Lenovo controller-channel LPDDR5 should be marked as soldered.'
+Assert-True -Condition ($LenovoSolderedMemory.Parts[0].Sn -eq '') -Message 'A repeated Lenovo soldered-memory identifier should not be written as a serial number.'
+Assert-True -Condition ($LenovoSolderedMemory.DetectedSpec -eq 'LPDDR5 8533MHz soldered') -Message 'Lenovo soldered memorySpec should not require a maximum capacity.'
+
 $DisplayParts = @(ConvertTo-DisplayParts `
     -MonitorIds @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; Active = $true; SerialNumberID = [byte[]](48, 0) }) `
     -DisplayParameters @([pscustomobject]@{ InstanceName = 'DISPLAY\NCP002B\TEST_0'; MaxHorizontalImageSize = 31; MaxVerticalImageSize = 17 }) `
@@ -394,6 +425,7 @@ Assert-True -Condition ($NetworkParts.Count -eq 3) -Message 'Only built-in Ether
 Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Realtek USB GbE Family Controller').Count -eq 0) -Message 'A USB network adapter should not be written to PHP.'
 Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Cisco AnyConnect Virtual Miniport Adapter for Windows x64').Count -eq 0) -Message 'A VPN adapter should be excluded.'
 Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Intel(R) Wi-Fi 6 AX201 160MHz').Sn -eq 'AC74B13CDD18') -Message 'PermanentAddress should be preferred and normalized.'
+Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Intel(R) Wi-Fi 6 AX201 160MHz').Count -eq 1) -Message 'Interfaces sharing one physical Wi-Fi PnPDeviceID should be deduplicated.'
 Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Bluetooth Device (Personal Area Network)').Conn -eq 'on board') -Message 'Bluetooth PAN should be retained despite Windows marking it virtual.'
 Assert-True -Condition ((Get-NormalizedMacAddress -Value 'FF-FF-FF-FF-FF-FF') -eq '') -Message 'A broadcast MAC address should be rejected.'
 Assert-True -Condition (Test-LocallyAdministeredMacAddress -Value '02-11-22-33-44-55') -Message 'A locally administered MAC address should be recognized.'
@@ -481,12 +513,21 @@ Assert-True -Condition ((Resolve-DeviceType -DatabaseDeviceType 'server' -Detect
 
 Assert-True -Condition (Test-MemorySpecHasMaximum -Value 'DDR4 3200MHz x2, max64GB') -Message 'A complete memorySpec should contain max...GB.'
 Assert-True -Condition (-not (Test-MemorySpecHasMaximum -Value 'DDR4 2x16GB 3200MHz')) -Message 'An installed-memory description without max...GB should be incomplete.'
+Assert-True -Condition (Test-MemorySpecIsComplete -Value 'LPDDR5 8533MHz soldered') -Message 'A soldered memorySpec should be complete without max...GB.'
 $IncompleteModelEntry = [pscustomobject]@{ model = 'Incomplete memory model'; memorySpec = 'DDR4 2x16GB 3200MHz' }
 $IncompleteMemoryInventory = [pscustomobject]@{ DetectedSpec = 'DDR4 3200MHz x2'; SpecReliable = $true }
 $script:MockReadHostQueue.Enqueue('DDR4 3200MHz x2, max64GB')
 $script:MockReadHostQueue.Enqueue('2')
 $CompletedMemorySpec = Resolve-MemorySpec -ModelEntry $IncompleteModelEntry -MemoryInventory $IncompleteMemoryInventory -DatabasePath (Join-Path $ProjectRoot 'hardware-models.json')
 Assert-True -Condition ($CompletedMemorySpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'An incomplete JSON memorySpec should require a complete interactive value.'
+
+$WrongLenovoMemoryEntry = [pscustomobject]@{ model = 'Yoga Slim test'; memorySpec = 'DDR4 4266MHz, max64GB' }
+$script:MockReadHostQueue.Enqueue('2')
+$ResolvedLenovoMemorySpec = Resolve-MemorySpec `
+    -ModelEntry $WrongLenovoMemoryEntry `
+    -MemoryInventory $LenovoSolderedMemory `
+    -DatabasePath (Join-Path $ProjectRoot 'hardware-models.json')
+Assert-True -Condition ($ResolvedLenovoMemorySpec -eq 'LPDDR5 8533MHz soldered') -Message 'Detected soldered LPDDR5 should not inherit an unrelated max...GB value from JSON.'
 
 $script:MockDiskFormFactorName = 'Unknown'
 $UnknownFormatDiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
