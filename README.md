@@ -113,3 +113,22 @@ Testy nie odczytują prawdziwego sprzętu. Sprawdzają bazę modeli, walidację 
 ```
 
 Automatyczny odczyt sprzętu należy sprawdzić na docelowym laptopie. Dane zwracane przez WMI, szczególnie pamięć karty graficznej, rodzaj osadzenia RAM i powiązanie rozdzielczości z ekranem EDID, mogą wymagać ręcznej korekty w interaktywnym przeglądzie.
+
+## Publikacja
+
+Skrypt `Deploy.ps1` publikuje pliki produkcyjne do `\\ntshare\helpdesk\scripts\GetHardware`:
+
+```powershell
+.\Deploy.ps1
+```
+
+Jeżeli udział wymaga innych poświadczeń niż bieżąca sesja:
+
+```powershell
+$Credential = Get-Credential
+.\Deploy.ps1 -Credential $Credential
+```
+
+Przed publikacją skrypt pobiera `hardware-models.json` z udziału do lokalnego repozytorium i sprawdza poprawność bazy. Produkcyjna baza nie jest kopiowana w przeciwną stronę ani usuwana, ponieważ uruchomienia inwentaryzacji dopisują do niej nowe modele. Jeżeli lokalna baza była inna, jej kopia bezpieczeństwa trafia do ignorowanego katalogu `.deploy-backup`.
+
+Publikowane są wyłącznie `Get-HardwareInventory.ps1`, `README.md` i `CHANGELOG.md`. Katalogi `.git`, `.codex`, `tests`, `output`, pliki robocze oraz sam skrypt wdrożeniowy nie trafiają na udział. Publikacja nie usuwa innych plików z katalogu docelowego. Przewidywane operacje można sprawdzić bez zapisu poleceniem `.\Deploy.ps1 -WhatIf`.
