@@ -86,6 +86,12 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 
 ### Pamięć RAM
 
+- [ ] Ujednolicić znaczenie i prezentację szybkości pamięci RAM (`MHz` a `MT/s`).
+  - SMBIOS raportuje pole `Speed` jako szybkość transmisji w `MT/s`, mimo że istniejąca baza i format PHP opisują te wartości jako `MHz`.
+  - Przykład: Lenovo z pamięcią LPDDR5X-8533 zwraca `8533`; nie jest to częstotliwość zegara 8533 MHz, lecz szybkość transmisji 8533 MT/s (około 4266,5 MHz zegara).
+  - Nie stosować automatycznie dzielenia przez dwa, dopóki nie zostanie uzgodnione, czy baza ma przechowywać rzeczywiste taktowanie, czy zwyczajową szybkość DDR opisaną jako MHz. Zmiana globalna przekształciłaby również DDR4-3200 na 1600 MHz i wymagałaby migracji lub warstwy zgodności dla istniejącej bazy.
+  - Do czasu podjęcia decyzji pozostawić obecne działanie bez zmian.
+
 - [x] Po opracowaniu odczytu RAM uzupełnić sposób budowania pola `mainb`.
   - Połączyć rzeczywiste dane płyty z `Win32_BaseBoard` z opisem obsługiwanej konfiguracji pamięci RAM.
   - Zachować format zbliżony do `Latitude 7420 (DDR3L 1600MHz x2, max8GB)`.
