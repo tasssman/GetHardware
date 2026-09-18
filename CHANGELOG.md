@@ -1,3 +1,7 @@
+# Zmiany w wersji v1.0.2
+
+- `e1d27ec` — Poprawki wykrywania kart dźwiękowych
+
 # Zmiany w wersji v1.0.1
 
 - `755cad2` — Dodanie bezpiecznego mechanizmu publikacji do `\\ntshare\helpdesk\scripts\GetHardware`
