@@ -2153,6 +2153,133 @@ function Write-SoundDeviceHealthWarning {
     }
 }
 
+function Get-SoundPnpCandidateDecision {
+    param([Parameter(Mandatory)][psobject]$Device)
+
+    $Class = ([string](Get-OptionalPropertyValue -InputObject $Device -Name 'Class')).Trim()
+    $Description = ([string](Get-OptionalPropertyValue -InputObject $Device -Name 'FriendlyName') -replace '\s+', ' ').Trim()
+    $InstanceId = ([string](Get-OptionalPropertyValue -InputObject $Device -Name 'InstanceId')).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($Description)) {
+        return [pscustomobject]@{ Include = $false; Reason = 'brak nazwy urządzenia' }
+    }
+    if ($Class -in @('AudioEndpoint', 'AudioProcessingObject', 'SoftwareComponent')) {
+        return [pscustomobject]@{ Include = $false; Reason = 'składnik programowy lub endpoint audio' }
+    }
+    if ($Class -notin @('MEDIA', 'System')) {
+        return [pscustomobject]@{ Include = $false; Reason = 'klasa niezwiązana z fizycznym kodekiem audio' }
+    }
+    if ($Class -eq 'System' -and $InstanceId -notmatch '^(?i)(?:SOUNDWIRE|HDAUDIO|INTELAUDIO)\\') {
+        return [pscustomobject]@{ Include = $false; Reason = 'systemowe urządzenie spoza magistrali audio' }
+    }
+    if ($InstanceId -match '^(?i)BTH\\' -or $Description -match '(?i)Bluetooth') {
+        return [pscustomobject]@{ Include = $false; Reason = 'urządzenie audio Bluetooth' }
+    }
+    if ($InstanceId -match '^(?i)INTELAUDIO\\(?:CTLR_|DSP_CTLR_|DIF_|SDW_CTLR_)' -or
+        $Description -match '(?i)Intel.*Smart Sound Technology') {
+        return [pscustomobject]@{ Include = $false; Reason = 'kontroler Intel Smart Sound Technology' }
+    }
+    if ($Description -match '(?i)\b(?:AMP|UAJ)\b|Microphones?|\bDMIC\b|Streaming') {
+        return [pscustomobject]@{ Include = $false; Reason = 'funkcja pomocnicza kodeka, mikrofon lub urządzenie streamingowe' }
+    }
+
+    $Score = 0
+    if ($Class -eq 'System') { $Score += 100 }
+    if ($InstanceId -match '^(?i)SOUNDWIRE\\SDCA&MAN_.+&PART_') { $Score += 100 }
+    if ($InstanceId -match '^(?i)(?:HDAUDIO|INTELAUDIO)\\FUNC_') { $Score += 80 }
+
+    return [pscustomobject]@{
+        Include     = $true
+        Description = $Description
+        Class       = $Class
+        InstanceId  = $InstanceId
+        Status      = ([string](Get-OptionalPropertyValue -InputObject $Device -Name 'Status')).Trim()
+        Score       = $Score
+    }
+}
+
+function Get-SoundPnpCandidates {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Devices)
+
+    $RankedCandidates = @(
+        foreach ($Device in $Devices) {
+            $Decision = Get-SoundPnpCandidateDecision -Device $Device
+            if ($Decision.Include) { $Decision }
+        }
+    ) | Sort-Object `
+        -Property @{ Expression = 'Score'; Descending = $true }, `
+                  @{ Expression = 'Description'; Descending = $false }, `
+                  @{ Expression = 'Class'; Descending = $false }
+
+    # Kilka funkcji jednego kodeka może mieć tę samą przyjazną nazwę. W PHP
+    # zapisujemy nazwę karty, więc powtarzające się nazwy nie pomagają w wyborze.
+    $SeenDescriptions = @{}
+    $Candidates = New-Object System.Collections.Generic.List[object]
+    foreach ($Candidate in $RankedCandidates) {
+        $Key = $Candidate.Description.ToUpperInvariant()
+        if ($SeenDescriptions.ContainsKey($Key)) { continue }
+        $SeenDescriptions[$Key] = $true
+        $Candidates.Add($Candidate)
+    }
+    return $Candidates.ToArray()
+}
+
+function Read-SoundPnpFallbackPart {
+    param([AllowNull()][object[]]$Devices)
+
+    if (-not $PSBoundParameters.ContainsKey('Devices')) {
+        if (-not (Get-Command -Name Get-PnpDevice -ErrorAction SilentlyContinue)) {
+            Write-Warning 'Polecenie Get-PnpDevice jest niedostępne; nie można uruchomić awaryjnego wykrywania karty dźwiękowej.'
+            return $null
+        }
+        try { $Devices = @(Get-PnpDevice -PresentOnly -ErrorAction Stop) }
+        catch {
+            Write-Warning "Nie udało się odczytać urządzeń PnP dla karty dźwiękowej: $($_.Exception.Message)"
+            return $null
+        }
+    }
+
+    $Candidates = @(Get-SoundPnpCandidates -Devices @($Devices))
+    Write-Section -Title 'Wybór karty dźwiękowej'
+    Write-Warning 'Podstawowa metoda nie wykryła głównego wewnętrznego kodeka audio.'
+    if ($Candidates.Count -gt 0) {
+        Write-Host 'Wybierz właściwą kartę spośród kandydatów PnP:'
+        for ($Index = 0; $Index -lt $Candidates.Count; $Index++) {
+            $Candidate = $Candidates[$Index]
+            $ClassText = if ([string]::IsNullOrWhiteSpace([string]$Candidate.Class)) { 'brak klasy' } else { $Candidate.Class }
+            $StatusText = if ([string]::IsNullOrWhiteSpace([string]$Candidate.Status)) { 'brak statusu' } else { $Candidate.Status }
+            Write-Host "[$($Index + 1)] $($Candidate.Description) [$ClassText; $StatusText]"
+        }
+    }
+    else {
+        Write-Host 'Po odfiltrowaniu składników pomocniczych nie znaleziono kandydatów PnP.' -ForegroundColor Yellow
+    }
+
+    $ManualChoice = $Candidates.Count + 1
+    $SkipChoice = $Candidates.Count + 2
+    $CancelChoice = $Candidates.Count + 3
+    Write-Host "[$ManualChoice] Wpisz nazwę karty ręcznie"
+    Write-Host "[$SkipChoice] Pomiń kartę dźwiękową"
+    Write-Host "[$CancelChoice] Anuluj"
+    $Choice = Read-MenuChoice `
+        -Prompt "Wybierz operację [1-$CancelChoice]" `
+        -Minimum 1 `
+        -Maximum $CancelChoice
+
+    if ($Choice -eq $CancelChoice) {
+        throw [OperationCanceledException]::new('Anulowano podczas wyboru karty dźwiękowej.')
+    }
+    if ($Choice -eq $SkipChoice) { return $null }
+
+    $Description = if ($Choice -eq $ManualChoice) {
+        Read-TextValue -Prompt 'Podaj nazwę karty dźwiękowej'
+    }
+    else {
+        [string]$Candidates[$Choice - 1].Description
+    }
+    return New-HardwarePart -Type 'Sound Card' -Description $Description -Connection 'on board'
+}
+
 function Get-SoundInventoryParts {
     $Parts = New-Object System.Collections.Generic.List[object]
     $Codecs = New-Object System.Collections.Generic.List[object]
@@ -2210,7 +2337,8 @@ function Get-SoundInventoryParts {
         return $Parts.ToArray()
     }
 
-    Write-Warning 'Nie wykryto głównego wewnętrznego kodeka audio.'
+    $PnpFallbackPart = Read-SoundPnpFallbackPart
+    if ($null -ne $PnpFallbackPart) { $Parts.Add($PnpFallbackPart) }
     return $Parts.ToArray()
 }
 

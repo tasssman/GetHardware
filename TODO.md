@@ -299,7 +299,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - [x] Używać `powercfg /batteryreport /xml` jako podstawowego źródła modelu, producenta, pojemności i liczby cykli.
   - [x] Korelować raport `powercfg` z `Win32_Battery` po identyfikatorze/nazwie baterii; pozycję stosować tylko dla jednoznacznego zestawu zawierającego po jednym rekordzie.
 
-- [ ] Rozszerzyć dane baterii dostępne podczas weryfikacji.
+- [X] Rozszerzyć dane baterii dostępne podczas weryfikacji.
   - [x] Odczytywać i pokazywać producenta oraz nazwę lub model; numer seryjny celowo ignorować, ponieważ jest skanowany osobno z etykiety baterii.
   - [x] Pokazywać pojemność projektową oraz aktualną pojemność po pełnym naładowaniu.
   - [x] Odczytywać liczbę cykli ładowania, jeśli sterownik i firmware ją udostępniają; wartość `0` traktować jako brak danych.

@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
-if ($ScriptVersion -ne 'v1.0.0') {
-    throw 'Assertion failed: The script version should be v1.0.0.'
+if ($ScriptVersion -ne 'v1.0.1') {
+    throw 'Assertion failed: The script version should be v1.0.1.'
 }
 
 function Assert-True {
@@ -438,6 +438,25 @@ Assert-True -Condition ($SoundParts.Count -eq 1) -Message 'Only one main interna
 Assert-True -Condition ($SoundParts[0].Desc -eq 'Realtek Audio') -Message 'The INTELAUDIO FUNC Realtek codec should be preferred.'
 Assert-True -Condition ($SoundParts[0].Conn -eq 'on board') -Message 'The main internal codec should use the on board connection.'
 
+$SoundPnpDevices = @(
+    [pscustomobject]@{ Status = 'OK'; Class = 'System'; FriendlyName = 'Cirrus Logic CS42L43'; InstanceId = 'SOUNDWIRE\SDCA&MAN_01FA&PART_4243&VER_03&CID_00' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'Cirrus Logic XU'; InstanceId = 'SOUNDWIRE\SDCA_06&MAN_01FA&FUNC_4243&TYPE_06&DYNAMICENUMSPEAKER0' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'Cirrus Logic XU'; InstanceId = 'SOUNDWIRE\SDCA_06&MAN_01FA&FUNC_4243&TYPE_06&DYNAMICENUMMICROPHONE0' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'SoundWire Audio'; InstanceId = 'SOUNDWIRE\AGGREGATOR\TEST' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'CS42L43 AMP'; InstanceId = 'SOUNDWIRE\SDCA_06&MAN_01FA&FUNC_4243&TYPE_01' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'CS42L43 UAJ'; InstanceId = 'SOUNDWIRE\SDCA_06&MAN_01FA&FUNC_4243&TYPE_06' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'SoundWire ACX Streaming for SDW - Speaker'; InstanceId = 'ROOT\STREAMING_SPEAKER' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'MEDIA'; FriendlyName = 'Intel Smart Sound Technology for Bluetooth Audio'; InstanceId = 'INTELAUDIO\CTLR_DEV_A828&LINKTYPE_03' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'AudioEndpoint'; FriendlyName = 'Remote Audio'; InstanceId = 'SWD\MMDEVAPI\TEST' }
+    [pscustomobject]@{ Status = 'OK'; Class = 'SoftwareComponent'; FriendlyName = 'DolbyAPO Software Device'; InstanceId = 'SWD\DRIVERENUM\DOLBY' }
+)
+$SoundPnpCandidates = @(Get-SoundPnpCandidates -Devices $SoundPnpDevices)
+Assert-True -Condition ($SoundPnpCandidates.Count -eq 3) -Message 'PnP sound fallback should retain only unique, plausible codec candidates.'
+Assert-True -Condition ($SoundPnpCandidates[0].Description -eq 'Cirrus Logic CS42L43') -Message 'A physical SoundWire SDCA parent should be the first candidate.'
+Assert-True -Condition (@($SoundPnpCandidates | Where-Object Description -EQ 'Cirrus Logic XU').Count -eq 1) -Message 'Duplicate PnP names should be shown only once.'
+Assert-True -Condition (@($SoundPnpCandidates | Where-Object Description -EQ 'CS42L43 AMP').Count -eq 0) -Message 'SoundWire amplifier functions should be filtered out.'
+Assert-True -Condition (@($SoundPnpCandidates | Where-Object Description -Match 'Streaming|Bluetooth|Remote Audio').Count -eq 0) -Message 'Streaming, Bluetooth, and endpoint devices should be filtered out.'
+
 $IntegratedGraphics = [pscustomobject]@{ AdapterRAM = 2GB; Caption = 'Intel(R) UHD Graphics'; VideoProcessor = 'Intel(R) UHD Graphics Family'; PNPDeviceID = 'PCI\VEN_8086&DEV_9A60'; Status = 'OK'; ConfigManagerErrorCode = 0 }
 Assert-True -Condition ((Get-GraphicsAdapterKind -Graphics $IntegratedGraphics) -eq 'Integrated') -Message 'Intel UHD Graphics should be classified as integrated.'
 Assert-True -Condition ((Get-GraphicsDescription -Graphics $IntegratedGraphics) -eq 'Intel(R) UHD Graphics') -Message 'Integrated graphics should not include misleading AdapterRAM in PHP.'
@@ -474,6 +493,17 @@ function Read-Host {
     }
     return $script:MockReadHostValue
 }
+
+$script:MockReadHostQueue.Enqueue('1')
+$SelectedPnpSoundPart = Read-SoundPnpFallbackPart -Devices $SoundPnpDevices
+Assert-True -Condition ($SelectedPnpSoundPart.Desc -eq 'Cirrus Logic CS42L43') -Message 'The user should be able to select the physical SoundWire codec.'
+Assert-True -Condition ($SelectedPnpSoundPart.Conn -eq 'on board') -Message 'A selected PnP codec should be stored as on board.'
+$script:MockReadHostQueue.Enqueue([string]($SoundPnpCandidates.Count + 1))
+$script:MockReadHostQueue.Enqueue('Custom Sound Codec')
+$ManualPnpSoundPart = Read-SoundPnpFallbackPart -Devices $SoundPnpDevices
+Assert-True -Condition ($ManualPnpSoundPart.Desc -eq 'Custom Sound Codec') -Message 'The fallback should allow a manual sound-card name.'
+$script:MockReadHostQueue.Enqueue([string]($SoundPnpCandidates.Count + 2))
+Assert-True -Condition ($null -eq (Read-SoundPnpFallbackPart -Devices $SoundPnpDevices)) -Message 'The fallback should allow skipping the sound card.'
 
 $script:MockReadHostQueue.Enqueue('')
 Assert-True -Condition ((Read-TextValue -Prompt 'Pomieszczenie' -Default 'A216') -eq 'A216') -Message 'Enter should accept the displayed room default.'

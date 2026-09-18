@@ -1,533 +1,542 @@
 [
-  {
-    "model": "Cisco MCS 7835-I2",
-    "baseboardFallback": "Cisco MCS 7835-I2; Cisco MCS 7800 series; MCS7835I2-K9-CMC",
-    "memorySpec": "up to 48 GB of DDR2, 8 slots",
-    "powerMaxW": 190,
-    "powerW": 95,
-    "other": "",
-    "deviceType": "server"
-  },
-  {
-    "model": "Galaxy T720 Tab S5e",
-    "baseboardFallback": "Galaxy T720 Tab S5e",
-    "memorySpec": "",
-    "powerMaxW": 0,
-    "powerW": 0,
-    "other": "",
-    "deviceType": "tablet"
-  },
-  {
-    "model": "Galaxy Tab Active2",
-    "baseboardFallback": "Galaxy Tab Active2",
-    "memorySpec": "",
-    "powerMaxW": 0,
-    "powerW": 0,
-    "other": "",
-    "deviceType": "tablet"
-  },
-  {
-    "model": "IBM 2076-824",
-    "baseboardFallback": "IBM 2076-824 IBM Macierz dyskowa IBM FlashSystem 7200",
-    "memorySpec": "",
-    "powerMaxW": 1400,
-    "powerW": 700,
-    "other": "",
-    "deviceType": "storage"
-  },
-  {
-    "model": "IBM 9009-22A",
-    "baseboardFallback": "IBM 9009-22A IBM Power S922",
-    "memorySpec": "",
-    "powerMaxW": 1400,
-    "powerW": 700,
-    "other": "",
-    "deviceType": "server"
-  },
-  {
-    "model": "Inspiron 5420",
-    "baseboardFallback": "Inspiron 5420",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 65,
-    "powerW": 65,
-    "other": "zasilanie mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 3310 2-in-1",
-    "baseboardFallback": "Latitude 3310 2-in-1",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "no Eth; zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 3340",
-    "baseboardFallback": "Latitude 3340",
-    "memorySpec": "",
-    "powerMaxW": 90,
-    "powerW": 80,
-    "other": "no Eth; zasilacz mini lub USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 3390 2-in-1",
-    "baseboardFallback": "Latitude 3390 2-in-1",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 45,
-    "powerW": 40,
-    "other": "no Eth; zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 3420",
-    "baseboardFallback": "Latitude 3420",
-    "memorySpec": "DDR4 max16GB x2",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz mini 4.5mm",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 3520",
-    "baseboardFallback": "Latitude 3520",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5300 2-in-1",
-    "baseboardFallback": "Latitude 5300 2-in-1",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "no Eth; ",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5310 2-in-1",
-    "baseboardFallback": "Dell Inc. 030FT5",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "no Eth; zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5310",
-    "baseboardFallback": "Latitude 5310",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zailanie duża końcówka; USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5320",
-    "baseboardFallback": "Dell Inc. 0KRH0R",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "no Eth; zasilacz USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5400",
-    "baseboardFallback": "Latitude 5400",
-    "memorySpec": "DDR4 2400 MHz max 32GB",
-    "powerMaxW": 50,
-    "powerW": 25,
-    "other": "noCam",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5401",
-    "baseboardFallback": "Latitude 5401",
-    "memorySpec": "",
-    "powerMaxW": 90,
-    "powerW": 80,
-    "other": "zasilacz duża końcówka; 90W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5410",
-    "baseboardFallback": "Latitude 5410",
-    "memorySpec": "DDR4L 3200MHz x2, max32GB",
-    "powerMaxW": 66,
-    "powerW": 50,
-    "other": "zasilacz USB-C; duza koncowka; 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5411",
-    "baseboardFallback": "Latitude 5411",
-    "memorySpec": "DDR4L 3200MHz x2, max32GB",
-    "powerMaxW": 66,
-    "powerW": 50,
-    "other": "zasilacz USB-C; duza koncowka; 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5420",
-    "baseboardFallback": "Dell Inc. 047J2X",
-    "memorySpec": "DDR4 2x16GB 3200MHz",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz USB-C; 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5421",
-    "baseboardFallback": "Dell Inc. 0FFCXR",
-    "memorySpec": "DDR4 3200MHz x2, max64GB",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5430",
-    "baseboardFallback": "Latitude 5430",
-    "memorySpec": "",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5491",
-    "baseboardFallback": "Latitude 5491",
-    "memorySpec": "",
-    "powerMaxW": 90,
-    "powerW": 80,
-    "other": "zasilacz duża końcówka 90W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5511",
-    "baseboardFallback": "Latitude 5511",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "numeryczna klawiatura;",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 5520",
-    "baseboardFallback": "Dell Inc. 0G60M3",
-    "memorySpec": "DDR4 2x16GB 3200MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7210 2-in-1",
-    "baseboardFallback": "Latitude 7210 2-in-1",
-    "memorySpec": "DDR3L-RS 1600MHz x2, max8GB",
-    "powerMaxW": 45,
-    "powerW": 45,
-    "other": "zasilacz USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7300",
-    "baseboardFallback": "Latitude 7300",
-    "memorySpec": "",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz USB-C; duża koncówka; 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7310",
-    "baseboardFallback": "Dell Inc. 0KD96W",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz USB-C 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7320",
-    "baseboardFallback": "Latitude 7320",
-    "memorySpec": "",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz USB-C 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7410",
-    "baseboardFallback": "Latitude 7410",
-    "memorySpec": "",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "zasilacz USB-C 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 7420",
-    "baseboardFallback": "Latitude 7420",
-    "memorySpec": "DDR3L 1600MHz x2, max8GB",
-    "powerMaxW": 65,
-    "powerW": 45,
-    "other": "no Eth; zasilacz USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude 9410",
-    "baseboardFallback": "Latitude 9410",
-    "memorySpec": "DDR3L 1600MHz x2, max8GB",
-    "powerMaxW": 65,
-    "powerW": 45,
-    "other": "no Eth; zasilacz USB-C",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude E5520",
-    "baseboardFallback": "Latitude E5520",
-    "memorySpec": "DDR3 2 sloty max 8GB 1333 MHz",
-    "powerMaxW": 130,
-    "powerW": 70,
-    "other": "",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Latitude E7440",
-    "baseboardFallback": "Latitude E7440",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "OptiPlex 7000",
-    "baseboardFallback": "Dell Inc. 0Y08K8",
-    "memorySpec": "",
-    "powerMaxW": 260,
-    "powerW": 260,
-    "other": "Klawiatura i mysz wifi: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex 7000 vPro",
-    "baseboardFallback": "Dell Inc. 0Y08K8",
-    "memorySpec": "",
-    "powerMaxW": 260,
-    "powerW": 260,
-    "other": "Klawiatura:??; Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex SFF Plus 7020",
-    "baseboardFallback": "Dell Inc. 008PGD",
-    "memorySpec": "",
-    "powerMaxW": 200,
-    "powerW": 80,
-    "other": "Klawiatura: ??<br>Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex 7080",
-    "baseboardFallback": "Dell Inc. 008PGD",
-    "memorySpec": "",
-    "powerMaxW": 200,
-    "powerW": 80,
-    "other": "",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex 7080 vPro",
-    "baseboardFallback": "Dell Inc. 0J37VM",
-    "memorySpec": "",
-    "powerMaxW": 260,
-    "powerW": 80,
-    "other": "Klawiatura:??; Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex 7090 SFF",
-    "baseboardFallback": "Dell Inc. 008PGD",
-    "memorySpec": "",
-    "powerMaxW": 200,
-    "powerW": 80,
-    "other": "Klawiatura: ??<br>Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex 7090 vPro",
-    "baseboardFallback": "Dell Inc. 0P9XHK",
-    "memorySpec": "",
-    "powerMaxW": 260,
-    "powerW": 80,
-    "other": "Klawiatura: ??<br>Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "OptiPlex Tower Plus 7010",
-    "baseboardFallback": "OptiPlex Tower Plus 7010",
-    "memorySpec": "DDR5 4sloty max128GB",
-    "powerMaxW": 260,
-    "powerW": 260,
-    "other": "Klawiatura: ??<br>Mysz: ??",
-    "deviceType": "desktop"
-  },
-  {
-    "model": "PowerEdge R740",
-    "baseboardFallback": "PowerEdge R740",
-    "memorySpec": "",
-    "powerMaxW": 1600,
-    "powerW": 250,
-    "other": "",
-    "deviceType": "server"
-  },
-  {
-    "model": "PowerEdge R740xd",
-    "baseboardFallback": "PowerEdge R740xd , do 24 dysków",
-    "memorySpec": "",
-    "powerMaxW": 1100,
-    "powerW": 250,
-    "other": "",
-    "deviceType": "server"
-  },
-  {
-    "model": "PowerEdge R750",
-    "baseboardFallback": "PowerEdge R750",
-    "memorySpec": "max32x64GB?RDIMM",
-    "powerMaxW": 1400,
-    "powerW": 900,
-    "other": "",
-    "deviceType": "server"
-  },
-  {
-    "model": "PowerVault ME5024",
-    "baseboardFallback": "PowerVault ME5024",
-    "memorySpec": "",
-    "powerMaxW": 580,
-    "powerW": 580,
-    "other": "",
-    "deviceType": "storage"
-  },
-  {
-    "model": "Precision 3551",
-    "baseboardFallback": "Precision 3551",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "numeryczna klawiatura",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 3560",
-    "baseboardFallback": "Precision 3560",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "zasilacz USB-C; numeryczna klawiatura",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 3561",
-    "baseboardFallback": "Precision 3561",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "zasilacz USB-C; numeryczna klawiatura",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 5530",
-    "baseboardFallback": "Precision 5530",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "no Eth; zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 5540",
-    "baseboardFallback": "Precision 5540",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "no Eth; zasilacz mini 130W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 5560",
-    "baseboardFallback": "Precision 5560",
-    "memorySpec": "DDR4 2 sloty",
-    "powerMaxW": 130,
-    "powerW": 120,
-    "other": "no Eth; zasilacz USB-C 130W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 7540",
-    "baseboardFallback": "Precision 7540 DELL",
-    "memorySpec": "DDR4 2x16GB 2667MHz",
-    "powerMaxW": 65,
-    "powerW": 62,
-    "other": "",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 7550",
-    "baseboardFallback": "Dell Inc. 01PXFR",
-    "memorySpec": "DDR4 2x16GB 3200MHz",
-    "powerMaxW": 180,
-    "powerW": 120,
-    "other": "zasilacz duza koncowka; USB-C; 180W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Precision 7560",
-    "baseboardFallback": "Dell Inc. 01PXFR",
-    "memorySpec": "DDR4 2x16GB 3200MHz",
-    "powerMaxW": 180,
-    "powerW": 120,
-    "other": "zasilacz duza koncowka; USB-C; 180W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Vostro 3400",
-    "baseboardFallback": "Vostro 3400",
-    "memorySpec": "max16GB x2 DDR4",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Vostro 3420",
-    "baseboardFallback": "Vostro 3420",
-    "memorySpec": "max16GB x2 DDR4",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz mini",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Vostro 14 3430",
-    "baseboardFallback": "Vostro 14 3430",
-    "memorySpec": "max16GB x2 DDR4",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz USB-C; mala koncowka; 65W",
-    "deviceType": "laptop"
-  },
-  {
-    "model": "Vostro 3520",
-    "baseboardFallback": "Vostro 3520",
-    "memorySpec": "max16GB x2 DDR4",
-    "powerMaxW": 65,
-    "powerW": 55,
-    "other": "zasilacz mini",
-    "deviceType": "laptop"
-  }
+    {
+        "model":  "Cisco MCS 7835-I2",
+        "baseboardFallback":  "Cisco MCS 7835-I2; Cisco MCS 7800 series; MCS7835I2-K9-CMC",
+        "memorySpec":  "up to 48 GB of DDR2, 8 slots",
+        "powerMaxW":  190,
+        "powerW":  95,
+        "other":  "",
+        "deviceType":  "server"
+    },
+    {
+        "model":  "Galaxy T720 Tab S5e",
+        "baseboardFallback":  "Galaxy T720 Tab S5e",
+        "memorySpec":  "",
+        "powerMaxW":  0,
+        "powerW":  0,
+        "other":  "",
+        "deviceType":  "tablet"
+    },
+    {
+        "model":  "Galaxy Tab Active2",
+        "baseboardFallback":  "Galaxy Tab Active2",
+        "memorySpec":  "",
+        "powerMaxW":  0,
+        "powerW":  0,
+        "other":  "",
+        "deviceType":  "tablet"
+    },
+    {
+        "model":  "IBM 2076-824",
+        "baseboardFallback":  "IBM 2076-824 IBM Macierz dyskowa IBM FlashSystem 7200",
+        "memorySpec":  "",
+        "powerMaxW":  1400,
+        "powerW":  700,
+        "other":  "",
+        "deviceType":  "storage"
+    },
+    {
+        "model":  "IBM 9009-22A",
+        "baseboardFallback":  "IBM 9009-22A IBM Power S922",
+        "memorySpec":  "",
+        "powerMaxW":  1400,
+        "powerW":  700,
+        "other":  "",
+        "deviceType":  "server"
+    },
+    {
+        "model":  "Inspiron 5420",
+        "baseboardFallback":  "Inspiron 5420",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  65,
+        "powerW":  65,
+        "other":  "zasilanie mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 3310 2-in-1",
+        "baseboardFallback":  "Latitude 3310 2-in-1",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "no Eth; zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 3340",
+        "baseboardFallback":  "Latitude 3340",
+        "memorySpec":  "",
+        "powerMaxW":  90,
+        "powerW":  80,
+        "other":  "no Eth; zasilacz mini lub USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 3390 2-in-1",
+        "baseboardFallback":  "Latitude 3390 2-in-1",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  45,
+        "powerW":  40,
+        "other":  "no Eth; zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 3420",
+        "baseboardFallback":  "Latitude 3420",
+        "memorySpec":  "DDR4 max16GB x2",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz mini 4.5mm",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 3520",
+        "baseboardFallback":  "Latitude 3520",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5300 2-in-1",
+        "baseboardFallback":  "Latitude 5300 2-in-1",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "no Eth; ",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5310 2-in-1",
+        "baseboardFallback":  "Dell Inc. 030FT5",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "no Eth; zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5310",
+        "baseboardFallback":  "Latitude 5310",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zailanie duża końcówka; USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5320",
+        "baseboardFallback":  "Dell Inc. 0KRH0R",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "no Eth; zasilacz USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5400",
+        "baseboardFallback":  "Latitude 5400",
+        "memorySpec":  "DDR4 2400 MHz max 32GB",
+        "powerMaxW":  50,
+        "powerW":  25,
+        "other":  "noCam",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5401",
+        "baseboardFallback":  "Latitude 5401",
+        "memorySpec":  "",
+        "powerMaxW":  90,
+        "powerW":  80,
+        "other":  "zasilacz duża końcówka; 90W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5410",
+        "baseboardFallback":  "Latitude 5410",
+        "memorySpec":  "DDR4L 3200MHz x2, max32GB",
+        "powerMaxW":  66,
+        "powerW":  50,
+        "other":  "zasilacz USB-C; duza koncowka; 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5411",
+        "baseboardFallback":  "Latitude 5411",
+        "memorySpec":  "DDR4L 3200MHz x2, max32GB",
+        "powerMaxW":  66,
+        "powerW":  50,
+        "other":  "zasilacz USB-C; duza koncowka; 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5420",
+        "baseboardFallback":  "Dell Inc. 047J2X",
+        "memorySpec":  "DDR4 2x16GB 3200MHz",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz USB-C; 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5421",
+        "baseboardFallback":  "Dell Inc. 0FFCXR",
+        "memorySpec":  "DDR4 3200MHz x2, max64GB",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5430",
+        "baseboardFallback":  "Latitude 5430",
+        "memorySpec":  "",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5491",
+        "baseboardFallback":  "Latitude 5491",
+        "memorySpec":  "",
+        "powerMaxW":  90,
+        "powerW":  80,
+        "other":  "zasilacz duża końcówka 90W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5511",
+        "baseboardFallback":  "Latitude 5511",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "numeryczna klawiatura;",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5520",
+        "baseboardFallback":  "Dell Inc. 0G60M3",
+        "memorySpec":  "DDR4 2x16GB 3200MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7210 2-in-1",
+        "baseboardFallback":  "Latitude 7210 2-in-1",
+        "memorySpec":  "DDR3L-RS 1600MHz x2, max8GB",
+        "powerMaxW":  45,
+        "powerW":  45,
+        "other":  "zasilacz USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7300",
+        "baseboardFallback":  "Latitude 7300",
+        "memorySpec":  "",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz USB-C; duża koncówka; 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7310",
+        "baseboardFallback":  "Dell Inc. 0KD96W",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz USB-C 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7320",
+        "baseboardFallback":  "Latitude 7320",
+        "memorySpec":  "",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz USB-C 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7410",
+        "baseboardFallback":  "Latitude 7410",
+        "memorySpec":  "",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "zasilacz USB-C 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7420",
+        "baseboardFallback":  "Latitude 7420",
+        "memorySpec":  "DDR3L 1600MHz x2, max8GB",
+        "powerMaxW":  65,
+        "powerW":  45,
+        "other":  "no Eth; zasilacz USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 9410",
+        "baseboardFallback":  "Latitude 9410",
+        "memorySpec":  "DDR3L 1600MHz x2, max8GB",
+        "powerMaxW":  65,
+        "powerW":  45,
+        "other":  "no Eth; zasilacz USB-C",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude E5520",
+        "baseboardFallback":  "Latitude E5520",
+        "memorySpec":  "DDR3 2 sloty max 8GB 1333 MHz",
+        "powerMaxW":  130,
+        "powerW":  70,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude E7440",
+        "baseboardFallback":  "Latitude E7440",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "OptiPlex 7000",
+        "baseboardFallback":  "Dell Inc. 0Y08K8",
+        "memorySpec":  "",
+        "powerMaxW":  260,
+        "powerW":  260,
+        "other":  "Klawiatura i mysz wifi: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex 7000 vPro",
+        "baseboardFallback":  "Dell Inc. 0Y08K8",
+        "memorySpec":  "",
+        "powerMaxW":  260,
+        "powerW":  260,
+        "other":  "Klawiatura:??; Mysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex SFF Plus 7020",
+        "baseboardFallback":  "Dell Inc. 008PGD",
+        "memorySpec":  "",
+        "powerMaxW":  200,
+        "powerW":  80,
+        "other":  "Klawiatura: ??\u003cbr\u003eMysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex 7080",
+        "baseboardFallback":  "Dell Inc. 008PGD",
+        "memorySpec":  "",
+        "powerMaxW":  200,
+        "powerW":  80,
+        "other":  "",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex 7080 vPro",
+        "baseboardFallback":  "Dell Inc. 0J37VM",
+        "memorySpec":  "",
+        "powerMaxW":  260,
+        "powerW":  80,
+        "other":  "Klawiatura:??; Mysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex 7090 SFF",
+        "baseboardFallback":  "Dell Inc. 008PGD",
+        "memorySpec":  "",
+        "powerMaxW":  200,
+        "powerW":  80,
+        "other":  "Klawiatura: ??\u003cbr\u003eMysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex 7090 vPro",
+        "baseboardFallback":  "Dell Inc. 0P9XHK",
+        "memorySpec":  "",
+        "powerMaxW":  260,
+        "powerW":  80,
+        "other":  "Klawiatura: ??\u003cbr\u003eMysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "OptiPlex Tower Plus 7010",
+        "baseboardFallback":  "OptiPlex Tower Plus 7010",
+        "memorySpec":  "DDR5 4sloty max128GB",
+        "powerMaxW":  260,
+        "powerW":  260,
+        "other":  "Klawiatura: ??\u003cbr\u003eMysz: ??",
+        "deviceType":  "desktop"
+    },
+    {
+        "model":  "PowerEdge R740",
+        "baseboardFallback":  "PowerEdge R740",
+        "memorySpec":  "",
+        "powerMaxW":  1600,
+        "powerW":  250,
+        "other":  "",
+        "deviceType":  "server"
+    },
+    {
+        "model":  "PowerEdge R740xd",
+        "baseboardFallback":  "PowerEdge R740xd , do 24 dysków",
+        "memorySpec":  "",
+        "powerMaxW":  1100,
+        "powerW":  250,
+        "other":  "",
+        "deviceType":  "server"
+    },
+    {
+        "model":  "PowerEdge R750",
+        "baseboardFallback":  "PowerEdge R750",
+        "memorySpec":  "max32x64GB?RDIMM",
+        "powerMaxW":  1400,
+        "powerW":  900,
+        "other":  "",
+        "deviceType":  "server"
+    },
+    {
+        "model":  "PowerVault ME5024",
+        "baseboardFallback":  "PowerVault ME5024",
+        "memorySpec":  "",
+        "powerMaxW":  580,
+        "powerW":  580,
+        "other":  "",
+        "deviceType":  "storage"
+    },
+    {
+        "model":  "Precision 3551",
+        "baseboardFallback":  "Precision 3551",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "numeryczna klawiatura",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 3560",
+        "baseboardFallback":  "Precision 3560",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "zasilacz USB-C; numeryczna klawiatura",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 3561",
+        "baseboardFallback":  "Precision 3561",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "zasilacz USB-C; numeryczna klawiatura",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 5530",
+        "baseboardFallback":  "Precision 5530",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "no Eth; zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 5540",
+        "baseboardFallback":  "Precision 5540",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "no Eth; zasilacz mini 130W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 5560",
+        "baseboardFallback":  "Precision 5560",
+        "memorySpec":  "DDR4 2 sloty",
+        "powerMaxW":  130,
+        "powerW":  120,
+        "other":  "no Eth; zasilacz USB-C 130W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 7540",
+        "baseboardFallback":  "Precision 7540 DELL",
+        "memorySpec":  "DDR4 2x16GB 2667MHz",
+        "powerMaxW":  65,
+        "powerW":  62,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 7550",
+        "baseboardFallback":  "Dell Inc. 01PXFR",
+        "memorySpec":  "DDR4 2x16GB 3200MHz",
+        "powerMaxW":  180,
+        "powerW":  120,
+        "other":  "zasilacz duza koncowka; USB-C; 180W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 7560",
+        "baseboardFallback":  "Dell Inc. 01PXFR",
+        "memorySpec":  "DDR4 2x16GB 3200MHz",
+        "powerMaxW":  180,
+        "powerW":  120,
+        "other":  "zasilacz duza koncowka; USB-C; 180W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Vostro 3400",
+        "baseboardFallback":  "Vostro 3400",
+        "memorySpec":  "max16GB x2 DDR4",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Vostro 3420",
+        "baseboardFallback":  "Vostro 3420",
+        "memorySpec":  "max16GB x2 DDR4",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Vostro 14 3430",
+        "baseboardFallback":  "Vostro 14 3430",
+        "memorySpec":  "max16GB x2 DDR4",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz USB-C; mala koncowka; 65W",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Vostro 3520",
+        "baseboardFallback":  "Vostro 3520",
+        "memorySpec":  "max16GB x2 DDR4",
+        "powerMaxW":  65,
+        "powerW":  55,
+        "other":  "zasilacz mini",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Yoga Slim 7 15ILL9 (83HM)",
+        "baseboardFallback":  "Yoga Slim 7 15ILL9 (83HM)",
+        "memorySpec":  "LPDDR5 8533MHz soldered",
+        "powerMaxW":  65,
+        "powerW":  50,
+        "other":  "",
+        "deviceType":  "laptop"
+    }
 ]
