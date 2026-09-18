@@ -2441,7 +2441,7 @@ function New-BatteryInventoryPart {
 
     # Numer seryjny baterii jest celowo ignorowany. Użytkownik skanuje go
     # bezpośrednio z etykiety, a importer oczekuje pustego pola sn.
-    $Part = New-HardwarePart -Type 'Battery' -Description 'Internal Battery' -Connection '' -SerialNumber ''
+    $Part = New-HardwarePart -Type 'Battery' -Description 'Internal Battery' -Connection 'on board' -SerialNumber ''
     $Part | Add-Member -NotePropertyName BatteryDeviceName -NotePropertyValue $DeviceName
     $Part | Add-Member -NotePropertyName BatteryManufacturer -NotePropertyValue $Manufacturer
     $Part | Add-Member -NotePropertyName BatteryDesignCapacityMWh -NotePropertyValue $DesignCapacity
@@ -3003,8 +3003,8 @@ function Get-HardwareParts {
 
     # BATERIA: powercfg dostarcza pojemność projektową i pełną, a Win32_Battery
     # bieżący stan, naładowanie i napięcie. Do PHP trafia wyłącznie prosty wpis
-    # Internal Battery z celowo pustym polem sn. Brak baterii jest prawidłowy dla
-    # komputerów stacjonarnych.
+    # Internal Battery z połączeniem on board i celowo pustym polem sn. Brak
+    # baterii jest prawidłowy dla komputerów stacjonarnych.
     foreach ($BatteryPart in @(Get-BatteryInventoryParts)) {
         $Parts.Add($BatteryPart)
     }

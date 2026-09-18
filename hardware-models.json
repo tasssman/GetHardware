@@ -536,7 +536,7 @@
         "memorySpec":  "LPDDR5 8533MHz soldered",
         "powerMaxW":  65,
         "powerW":  50,
-        "other":  "",
+        "other":  "zasilacz USB-C",
         "deviceType":  "laptop"
     }
 ]

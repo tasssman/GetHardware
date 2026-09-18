@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
-if ($ScriptVersion -ne 'v1.0.1') {
-    throw 'Assertion failed: The script version should be v1.0.1.'
+if ($ScriptVersion -ne 'v1.0.2') {
+    throw 'Assertion failed: The script version should be v1.0.2.'
 }
 
 function Assert-True {
@@ -467,6 +467,7 @@ Assert-True -Condition ((Get-GraphicsDescription -Graphics $DedicatedGraphics) -
 $BatteryParts = @(Get-BatteryInventoryParts)
 Assert-True -Condition ($BatteryParts.Count -eq 1) -Message 'One battery-report entry should produce one battery part.'
 Assert-True -Condition ($BatteryParts[0].Desc -eq 'Internal Battery') -Message 'The PHP battery description should remain generic.'
+Assert-True -Condition ($BatteryParts[0].Conn -eq 'on board') -Message 'An automatically detected internal battery should use the on board connection.'
 Assert-True -Condition ($BatteryParts[0].Sn -eq '') -Message 'The detected battery serial number should be ignored.'
 Assert-True -Condition ($BatteryParts[0].BatteryDeviceName -eq 'DELL 0P3TJYK') -Message 'The battery model should remain available diagnostically.'
 Assert-True -Condition ($BatteryParts[0].BatteryHealthPercent -eq 63.5) -Message 'Battery health should be calculated from full and design capacity.'
@@ -624,7 +625,7 @@ $Inventory = [pscustomobject]@{
 $Parts = @(
     New-HardwarePart -Type 'Matrix' -Description '14" 1920x1080 touch' -Connection 'on board'
     New-HardwarePart -Type 'Network Card' -Description "Adapter test's name" -Connection 'on board' -SerialNumber 'D03C1FD5C7D0'
-    New-HardwarePart -Type 'Battery' -Description 'Internal Battery' -Connection '' -SerialNumber ''
+    New-HardwarePart -Type 'Battery' -Description 'Internal Battery' -Connection 'on board' -SerialNumber ''
 )
 
 $Body = New-PhpRecordBody -Inventory $Inventory -Parts $Parts
@@ -632,7 +633,7 @@ Assert-True -Condition ($Body.Contains("addComp('13QJ7D3_laptop',`$C,`$partsLapt
 Assert-True -Condition ($Body.Contains("Intel test\'s CPU")) -Message 'Apostrophes should be escaped for PHP.'
 Assert-True -Condition ($Body.Contains(",'mhz'=>3000")) -Message 'The resolved processor frequency should be written to mhz.'
 Assert-True -Condition ($Body.Contains("'sn'=>'D03C1FD5C7D0'")) -Message 'Optional component serial numbers should be rendered.'
-Assert-True -Condition ($Body.Contains("array('pt'=>'Battery', 'desc'=>'Internal Battery', 'conn'=>'', 'sn'=>'');")) -Message 'A battery should always contain an explicitly empty sn field.'
+Assert-True -Condition ($Body.Contains("array('pt'=>'Battery', 'desc'=>'Internal Battery', 'conn'=>'on board', 'sn'=>'');")) -Message 'A battery should use on board and always contain an explicitly empty sn field.'
 Assert-True -Condition ($Body.Contains('#https://www.dell.com/support/home/en-us/product-support/servicetag/13QJ7D3/overview')) -Message 'A Dell PHP record should contain its support URL.'
 $NonDellInventory = $Inventory.PSObject.Copy()
 $NonDellInventory.Manufacturer = 'Lenovo'
