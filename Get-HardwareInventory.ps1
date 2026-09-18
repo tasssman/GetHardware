@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ScriptVersion = 'v1.0.1'
+$ScriptVersion = 'v1.0.2'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
