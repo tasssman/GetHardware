@@ -1,3 +1,7 @@
+# Zmiany w wersji v1.0.3
+
+- Zmieniono uzupełnianie notatki: opcjonalny numer SCC, wybór REFURBISHED, dodatkowy tekst oraz akceptacja lub poprawa całej notatki.
+
 # Zmiany w wersji v1.0.2
 
 - `e1d27ec` — Poprawki wykrywania kart dźwiękowych

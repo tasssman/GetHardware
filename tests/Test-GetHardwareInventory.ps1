@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
-if ($ScriptVersion -ne 'v1.0.2') {
-    throw 'Assertion failed: The script version should be v1.0.2.'
+if ($ScriptVersion -ne 'v1.0.3') {
+    throw 'Assertion failed: The script version should be v1.0.3.'
 }
 
 function Assert-True {
@@ -18,6 +18,15 @@ function Assert-True {
         throw "Assertion failed: $Message"
     }
 }
+
+$DeployTokens = $null
+$DeployParseErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $ProjectRoot 'Deploy.ps1'),
+    [ref]$DeployTokens,
+    [ref]$DeployParseErrors
+)
+Assert-True -Condition ($DeployParseErrors.Count -eq 0) -Message 'Deploy.ps1 should parse successfully in Windows PowerShell 5.1.'
 
 $Models = @(Import-ModelDatabase -Path (Join-Path $ProjectRoot 'hardware-models.json'))
 Assert-True -Condition ($Models.Count -gt 0) -Message 'The model database should not be empty.'
@@ -513,9 +522,33 @@ $script:MockReadHostQueue.Enqueue('')
 Assert-True -Condition ((Read-TextValue -Prompt 'Pole (opcjonalnie)' -Default '' -AllowEmpty) -eq '') -Message 'Enter should leave an optional field empty.'
 Assert-True -Condition ($script:MockReadHostPrompts[$script:MockReadHostPrompts.Count - 1] -eq 'Pole (opcjonalnie)') -Message 'An empty default should not be displayed as empty square brackets.'
 $script:MockReadHostQueue.Enqueue('')
-Assert-True -Condition ((Read-TextValue -Prompt 'Notatka' -Default 'SCC:;REFURBISHED;') -eq 'SCC:;REFURBISHED;') -Message 'Enter should accept the displayed note template.'
-$script:MockReadHostQueue.Enqueue('')
 Assert-True -Condition ((Read-TextValue -Prompt 'Format dysku' -Default 'M.2') -eq 'M.2') -Message 'Enter should accept a detected disk form factor.'
+
+$script:MockReadHostQueue.Enqueue('21393')
+$script:MockReadHostQueue.Enqueue('x')
+$script:MockReadHostQueue.Enqueue('t')
+$script:MockReadHostQueue.Enqueue('T')
+$script:MockReadHostQueue.Enqueue('Wymiana baterii')
+$script:MockReadHostQueue.Enqueue('2')
+$script:MockReadHostQueue.Enqueue('SCC:21393;REFURBISHED;Poprawiona uwaga')
+$script:MockReadHostQueue.Enqueue('1')
+$ConfirmedInventoryNote = Read-InventoryNote
+Assert-True -Condition ($ConfirmedInventoryNote -eq 'SCC:21393;REFURBISHED;Poprawiona uwaga') -Message 'The user should be able to review and replace the complete assembled note.'
+Assert-True -Condition (-not $ConfirmedInventoryNote.EndsWith(';')) -Message 'An accepted note should not have a trailing semicolon.'
+
+$script:MockReadHostQueue.Enqueue('')
+$script:MockReadHostQueue.Enqueue('N')
+$script:MockReadHostQueue.Enqueue('N')
+$script:MockReadHostQueue.Enqueue('1')
+$EmptyInventoryNote = Read-InventoryNote
+Assert-True -Condition ($EmptyInventoryNote -eq '') -Message 'An empty SCC, a negative refurbished answer, and no additional text should produce an empty note.'
+
+$script:MockReadHostQueue.Enqueue('')
+$script:MockReadHostQueue.Enqueue('T')
+$script:MockReadHostQueue.Enqueue('N')
+$script:MockReadHostQueue.Enqueue('1')
+$RefurbishedOnlyNote = Read-InventoryNote
+Assert-True -Condition ($RefurbishedOnlyNote -eq 'REFURBISHED') -Message 'A refurbished laptop without SCC or additional text should produce only REFURBISHED.'
 
 $script:MockReadHostQueue.Enqueue('1')
 Confirm-InventoryEnvironment

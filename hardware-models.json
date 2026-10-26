@@ -538,5 +538,14 @@
         "powerW":  50,
         "other":  "zasilacz USB-C",
         "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7450",
+        "baseboardFallback":  "Latitude 7450",
+        "memorySpec":  "LPDDR5 7500MHz soldered",
+        "powerMaxW":  65,
+        "powerW":  40,
+        "other":  "zasilacz USB-C",
+        "deviceType":  "laptop"
     }
 ]

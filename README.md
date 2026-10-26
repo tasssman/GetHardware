@@ -2,7 +2,7 @@
 
 Interaktywny skrypt Windows PowerShell 5.1 odczytujący informacje o sprzęcie i zapisujący je w plikach PHP przeznaczonych do importu do istniejącej bazy.
 
-Aktualna wersja skryptu: `v1.0.0`. Numer wersji jest wyświetlany jako pierwszy komunikat po uruchomieniu. Nazwa pliku pozostaje stała niezależnie od wersji.
+Aktualna wersja skryptu: `v1.0.3`. Numer wersji jest wyświetlany jako pierwszy komunikat po uruchomieniu. Nazwa pliku pozostaje stała niezależnie od wersji.
 
 ## Wymagania
 
@@ -13,13 +13,27 @@ Aktualna wersja skryptu: `v1.0.0`. Numer wersji jest wyświetlany jako pierwszy 
 
 ## Uruchomienie
 
-Na inwentaryzowanym laptopie otwórz Windows PowerShell i wklej poniższe polecenie w jednej linii. Zastąp `DOMENA\uzytkownik` właściwą nazwą konta domenowego:
+Na inwentaryzowanym laptopie z czystym systemem otwórz Windows PowerShell. Wykonaj kolejno poniższe polecenia w tym samym oknie. Każde polecenie jest w jednej linii. Nie wpisuj słowa `PowerShell` przed poleceniami i nie zamykaj okna między krokami.
+
+Najpierw zezwól na uruchamianie skryptów tylko w bieżącym oknie:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $Credential=Get-Credential -Message 'Podaj konto domenowe' -UserName 'DOMENA\uzytkownik'; New-PSDrive -Name GH -PSProvider FileSystem -Root '\\ntshare\helpdesk\scripts\GetHardware' -Credential $Credential -ErrorAction Stop | Out-Null; try { & 'GH:\Get-HardwareInventory.ps1' } finally { Remove-PSDrive -Name GH -Force -ErrorAction SilentlyContinue }
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 ```
 
-Polecenie zezwala na wykonywanie skryptów wyłącznie w bieżącym oknie PowerShell, bez trwałej zmiany polityki komputera. Hasło jest podawane w bezpiecznym oknie i nie należy wpisywać go bezpośrednio w poleceniu. Skrypt oraz pliki bazy są odczytywane z udziału sieciowego, wyniki trafiają do `\\ntshare\helpdesk\scripts\GetHardware\output`, a tymczasowy dysk `GH:` jest automatycznie odłączany po zakończeniu pracy.
+Sprawdź, czy zmiana zadziałała. Wynik powinien być `Bypass`:
+
+```powershell
+Get-ExecutionPolicy
+```
+
+Następnie zastąp `DOMENA\uzytkownik` właściwą nazwą konta domenowego i uruchom inwentaryzację:
+
+```powershell
+$Credential=Get-Credential -Message 'Podaj konto domenowe' -UserName 'DOMENA\uzytkownik'; New-PSDrive -Name GH -PSProvider FileSystem -Root '\\ntshare\helpdesk\scripts\GetHardware' -Credential $Credential -ErrorAction Stop | Out-Null; try { & 'GH:\Get-HardwareInventory.ps1' } finally { Remove-PSDrive -Name GH -Force -ErrorAction SilentlyContinue }
+```
+
+Ustawienie dotyczy wyłącznie bieżącego procesu PowerShell i nie zmienia trwale polityki komputera. Hasło jest podawane w bezpiecznym oknie i nie należy wpisywać go bezpośrednio w poleceniu. Skrypt oraz pliki bazy są odczytywane z udziału sieciowego, wyniki trafiają do `\\ntshare\helpdesk\scripts\GetHardware\output`, a tymczasowy dysk `GH:` jest automatycznie odłączany po zakończeniu pracy.
 
 Jeśli `MachinePolicy` albo `UserPolicy` widoczne w `Get-ExecutionPolicy -List` są wymuszone administracyjnie, ustawienie dla zakresu `Process` może ich nie zastąpić. W takim przypadku potrzebny jest podpisany skrypt albo zmiana polityki przez administratora.
 
@@ -102,7 +116,7 @@ W formularzach tekst w nawiasach kwadratowych, np. `[A216]`, jest rzeczywistą w
 - `cenan`: kwota PLN z dwiema cyframi po przecinku, np. `1414,08`;
 - `label`: interaktywny wybór `W10P`, `W11P` albo wpisanie dowolnej niepustej etykiety;
 - `room`: domyślnie `A216`;
-- `note`: domyślny szablon `SCC:;REFURBISHED;`.
+- `note`: opcjonalny numer SCC, wybór REFURBISHED (`T/N`) i opcjonalny dodatkowy tekst; gotowa notatka jest wyświetlana do akceptacji lub poprawy i nie kończy się średnikiem.
 
 ## Testy
 

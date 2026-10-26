@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+﻿[CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
 param(
     [string]$Destination = '\\ntshare\helpdesk\scripts\GetHardware',
     [System.Management.Automation.PSCredential]$Credential

@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ScriptVersion = 'v1.0.2'
+$ScriptVersion = 'v1.0.3'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
@@ -178,19 +178,66 @@ function Read-LicenseLabel {
     return Read-TextValue -Prompt 'Podaj własną etykietę systemu' -Default $CustomDefault
 }
 
+function Read-YesNo {
+    param([Parameter(Mandatory)][string]$Prompt)
+
+    while ($true) {
+        $Value = (Read-Host $Prompt).Trim().ToUpperInvariant()
+        if ($Value -eq 'T') { return $true }
+        if ($Value -eq 'N') { return $false }
+        Write-Warning 'Wpisz T albo N.'
+    }
+}
+
+function Read-InventoryNote {
+    $SccNumber = Read-TextValue -Prompt 'Podaj numer SCC (opcjonalnie)' -Default $null -AllowEmpty
+    $IsRefurbished = Read-YesNo -Prompt 'Czy laptop jest REFURBISHED? [T/N]'
+    $AddMore = Read-YesNo -Prompt 'Czy chcesz coś dodać do notatki? [T/N]'
+    $AdditionalText = if ($AddMore) {
+        Read-TextValue -Prompt 'Wpisz dodatkową treść notatki' -Default $null -AllowEmpty
+    }
+    else {
+        ''
+    }
+
+    $NoteParts = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($SccNumber)) {
+        $NoteParts.Add("SCC:$SccNumber")
+    }
+    if ($IsRefurbished) {
+        $NoteParts.Add('REFURBISHED')
+    }
+    if (-not [string]::IsNullOrWhiteSpace($AdditionalText)) {
+        $NoteParts.Add($AdditionalText)
+    }
+    $Note = $NoteParts -join ';'
+
+    while ($true) {
+        $DisplayedNote = if ([string]::IsNullOrWhiteSpace($Note)) { '[pusta]' } else { $Note }
+        Write-Host "Notatka do zapisu: $DisplayedNote"
+        Write-Host '[1] Akceptuj notatkę'
+        Write-Host '[2] Popraw całą notatkę'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
+        if ($Choice -eq 1) { return $Note }
+
+        $Note = Read-TextValue `
+            -Prompt 'Wpisz poprawioną całą notatkę (puste pole oznacza pustą notatkę)' `
+            -Default $null `
+            -AllowEmpty
+    }
+}
+
 function Read-ManualData {
     param([AllowNull()][psobject]$Current)
 
     $WarrantyDefault = $null
     $PriceDefault = $null
     $RoomDefault = 'A216'
-    $NoteDefault = 'SCC:;REFURBISHED;'
     $CurrentLabel = $null
     if ($null -ne $Current) {
         $WarrantyDefault = [string]$Current.Warranty
         $PriceDefault = [string]$Current.Price
         $RoomDefault = [string]$Current.Room
-        $NoteDefault = [string]$Current.Note
         $CurrentLabel = [string]$Current.Label
     }
 
@@ -199,7 +246,7 @@ function Read-ManualData {
     $Price = Read-Price -Default $PriceDefault
     $Label = Read-LicenseLabel -Current $CurrentLabel
     $Room = Read-TextValue -Prompt 'Pomieszczenie' -Default $RoomDefault
-    $Note = Read-TextValue -Prompt 'Notatka (uzupełnij numer po SCC:)' -Default $NoteDefault
+    $Note = Read-InventoryNote
 
     return [pscustomobject]@{
         Warranty = $Warranty

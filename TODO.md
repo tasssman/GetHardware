@@ -110,6 +110,11 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Dla modułów niewlutowanych zapisywać uzgodnione `conn'=>'on board'`.
   - Niejednoznaczne lub mieszane dane kierować do interaktywnego wyboru `memorySpec`.
 
+- [ ] Bezpiecznie obsługiwać różne warianty RAM-u pod tą samą nazwą modelu.
+  - Przy różnicy między wykrytym montażem RAM-u a `memorySpec` z JSON-u wyraźnie ostrzegać, że zapis do bazy zmieni konfigurację dla wszystkich urządzeń o tej nazwie modelu.
+  - Umożliwić użycie wykrytej konfiguracji tylko dla bieżącego komputera w obu kierunkach: RAM lutowany ↔ moduły wymienne.
+  - Przygotować test dwóch kolejnych komputerów tego samego modelu z różnymi wariantami, sprawdzający, że wybór konfiguracji tylko dla bieżącego urządzenia nie zmienia wspólnego JSON-u.
+
 - [x] Rozszerzyć mapowanie `SMBIOSMemoryType`.
   - Uwzględnić brakujące typy, m.in. DDR2 FB-DIMM, LPDDR, LPDDR2, LPDDR3 oraz HBM.
   - Uwzględniono DDR, DDR2, DDR3, FB-DIMM, DDR4, LPDDR–LPDDR5, HBM–HBM3 i DDR5.
