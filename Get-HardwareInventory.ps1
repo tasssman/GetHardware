@@ -2060,7 +2060,8 @@ function Get-NetworkAdapterDecision {
     # Bluetooth PAN jest przez Windows oznaczany jako adapter wirtualny, mimo że
     # reprezentuje fizyczny, zwykle wbudowany moduł Bluetooth.
     if ($PnpDeviceId -match '^(?i)BTH\\' -or $PhysicalMediaType -match '^(?i)Bluetooth$') {
-        return [pscustomobject]@{ Include = $true; Description = $Description; Connection = 'on board'; Reason = 'Bluetooth PAN' }
+        $BluetoothDescription = $Description -replace '(?i)\s*\(Personal Area Network\)\s*$', ''
+        return [pscustomobject]@{ Include = $true; Description = $BluetoothDescription; Connection = 'on board'; Reason = 'Bluetooth PAN' }
     }
 
     $VirtualPattern = '(?i)WAN Miniport|Wi-Fi Direct Virtual|Virtual (?:Ethernet|Switch|Miniport)|VPN|AnyConnect|Hyper-V|Teredo|6to4|IP-HTTPS|Kernel Debug|Loopback'

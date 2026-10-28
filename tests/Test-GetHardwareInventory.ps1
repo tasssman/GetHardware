@@ -438,7 +438,7 @@ Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Realtek USB GbE
 Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Cisco AnyConnect Virtual Miniport Adapter for Windows x64').Count -eq 0) -Message 'A VPN adapter should be excluded.'
 Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Intel(R) Wi-Fi 6 AX201 160MHz').Sn -eq 'AC74B13CDD18') -Message 'PermanentAddress should be preferred and normalized.'
 Assert-True -Condition (@($NetworkParts | Where-Object Desc -EQ 'Intel(R) Wi-Fi 6 AX201 160MHz').Count -eq 1) -Message 'Interfaces sharing one physical Wi-Fi PnPDeviceID should be deduplicated.'
-Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Bluetooth Device (Personal Area Network)').Conn -eq 'on board') -Message 'Bluetooth PAN should be retained despite Windows marking it virtual.'
+Assert-True -Condition (($NetworkParts | Where-Object Desc -EQ 'Bluetooth Device').Conn -eq 'on board') -Message 'Bluetooth PAN should be retained without the redundant Personal Area Network suffix.'
 Assert-True -Condition ((Get-NormalizedMacAddress -Value 'FF-FF-FF-FF-FF-FF') -eq '') -Message 'A broadcast MAC address should be rejected.'
 Assert-True -Condition (Test-LocallyAdministeredMacAddress -Value '02-11-22-33-44-55') -Message 'A locally administered MAC address should be recognized.'
 
