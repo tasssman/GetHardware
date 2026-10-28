@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
-if ($ScriptVersion -ne 'v1.0.3') {
-    throw 'Assertion failed: The script version should be v1.0.3.'
+if ($ScriptVersion -ne 'v1.0.4') {
+    throw 'Assertion failed: The script version should be v1.0.4.'
 }
 
 function Assert-True {
@@ -677,9 +677,37 @@ $DevicePhp = New-DevicePhp -Body $Body
 Assert-True -Condition ($DevicePhp.StartsWith("<?php`r`n")) -Message 'A device file should start with a PHP opening tag.'
 Assert-True -Condition ($DevicePhp.EndsWith("?>`r`n")) -Message 'A device file should end with a PHP closing tag.'
 
+$SelectionRoot = Join-Path $env:TEMP ('.gethardware-selection-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $SelectionRoot -Force | Out-Null
+try {
+    $script:MockReadHostQueue.Enqueue('NEW_TEST_COLLECTION')
+    $script:MockReadHostQueue.Enqueue('POLAN-36')
+    $script:MockReadHostQueue.Enqueue('')
+    $NewCollection = Select-Collection -Root $SelectionRoot
+    Assert-True -Condition ($NewCollection.WarrantySuffix -eq 'POLAN-36') -Message 'A new collection should capture its optional general warranty suffix.'
+    Assert-True -Condition ($NewCollection.Invoice -eq '') -Message 'A new collection should allow an empty invoice number.'
+
+    New-Item -ItemType Directory -Path (Join-Path $SelectionRoot 'EXISTING_TEST') | Out-Null
+    $PromptCountBeforeExistingSelection = $script:MockReadHostPrompts.Count
+    $script:MockReadHostQueue.Enqueue('1')
+    $ExistingCollection = Select-Collection -Root $SelectionRoot
+    Assert-True -Condition (-not $ExistingCollection.PSObject.Properties['WarrantySuffix']) -Message 'Selecting an existing collection should not request or replace its warranty suffix.'
+    Assert-True -Condition ($script:MockReadHostPrompts.Count -eq ($PromptCountBeforeExistingSelection + 1)) -Message 'Selecting an existing collection should prompt only for its menu choice.'
+}
+finally {
+    if (Test-Path -LiteralPath $SelectionRoot -PathType Container) {
+        Remove-Item -LiteralPath $SelectionRoot -Recurse -Force
+    }
+}
+
 $FirstBlock = New-CollectionBlock -ServiceTag '13QJ7D3' -Body $Body
-$CollectionPhp = Update-CollectionPhp -ExistingContent $null -ServiceTag '13QJ7D3' -Block $FirstBlock -Action Add
+$CollectionPhp = Update-CollectionPhp -ExistingContent $null -ServiceTag '13QJ7D3' -Block $FirstBlock -Action Add -WarrantySuffix 'POLAN-36' -Invoice "INV'11105"
 Assert-True -Condition ($CollectionPhp.Contains('# GET-HARDWARE-BEGIN: 13QJ7D3')) -Message 'The aggregate should contain a record marker.'
+Assert-True -Condition ($CollectionPhp.Contains("`$dopisekWarranty='POLAN-36';")) -Message 'A new aggregate should store the general warranty suffix once in its header.'
+Assert-True -Condition ($CollectionPhp.Contains("`$invoice='INV\'11105';")) -Message 'A new aggregate should store the escaped invoice number once in its header.'
+Assert-True -Condition ($CollectionPhp.Contains('include "./insert_lib.php";')) -Message 'A new aggregate should include insert_lib.php after its invoice header.'
+Assert-True -Condition ($CollectionPhp.Contains("echo '`$maxIndex: '.`$maxIndex.'<hr>';")) -Message 'A new aggregate should echo maxIndex after including insert_lib.php.'
+Assert-True -Condition ($CollectionPhp.EndsWith("koncz(`$rep);`r`n?>`r`n")) -Message 'A new aggregate should finish with koncz($rep) before the PHP closing tag.'
 
 $SecondInventory = $Inventory.PSObject.Copy()
 $SecondInventory.ServiceTag = 'SECOND1'
@@ -687,19 +715,24 @@ $SecondBody = New-PhpRecordBody -Inventory $SecondInventory -Parts $Parts
 $SecondBlock = New-CollectionBlock -ServiceTag 'SECOND1' -Body $SecondBody
 $CollectionPhp = Update-CollectionPhp -ExistingContent $CollectionPhp -ServiceTag 'SECOND1' -Block $SecondBlock -Action Add
 Assert-True -Condition ($CollectionPhp.IndexOf('13QJ7D3') -lt $CollectionPhp.IndexOf('SECOND1')) -Message 'New records should be appended in order.'
+Assert-True -Condition ([regex]::Matches($CollectionPhp, 'include "\./insert_lib\.php";').Count -eq 1) -Message 'Appending a record should not duplicate the aggregate header.'
+Assert-True -Condition ([regex]::Matches($CollectionPhp, 'koncz\(\$rep\);').Count -eq 1) -Message 'Appending a record should preserve exactly one final koncz call.'
 
 $ChangedBody = $Body.Replace("'room'=>'A216'", "'room'=>'A217'")
 $ChangedBlock = New-CollectionBlock -ServiceTag '13QJ7D3' -Body $ChangedBody
 $CollectionPhp = Update-CollectionPhp -ExistingContent $CollectionPhp -ServiceTag '13QJ7D3' -Block $ChangedBlock -Action Replace
 Assert-True -Condition ($CollectionPhp.Contains("'room'=>'A217'")) -Message 'Replacing a record should update its content.'
 Assert-True -Condition ($CollectionPhp.IndexOf('13QJ7D3') -lt $CollectionPhp.IndexOf('SECOND1')) -Message 'Replacing a record should preserve its order.'
+Assert-True -Condition ([regex]::Matches($CollectionPhp, 'koncz\(\$rep\);').Count -eq 1) -Message 'Replacing a record should preserve exactly one final koncz call.'
 
 $TestOutputRoot = Join-Path $PSScriptRoot ('.output-' + [guid]::NewGuid().ToString('N'))
 $script:OutputRoot = $TestOutputRoot
 $TestCollection = [pscustomobject]@{
-    Name  = 'TEST_COLLECTION'
-    Path  = Join-Path $TestOutputRoot 'TEST_COLLECTION'
-    IsNew = $true
+    Name           = 'TEST_COLLECTION'
+    Path           = Join-Path $TestOutputRoot 'TEST_COLLECTION'
+    IsNew          = $true
+    WarrantySuffix = 'POLAN-36'
+    Invoice        = 'INV11105'
 }
 try {
     $Saved = Save-InventoryFiles `
@@ -785,6 +818,8 @@ try {
         -Action Replace
     $SavedAggregate = [IO.File]::ReadAllText($SavedReplacement.CollectionPath)
     Assert-True -Condition ($SavedAggregate.Contains("'room'=>'A217'")) -Message 'A saved replacement should update the aggregate file.'
+    Assert-True -Condition ($SavedAggregate.Contains("`$dopisekWarranty='POLAN-36';") -and $SavedAggregate.Contains("`$invoice='INV11105';")) -Message 'Saving a device should keep collection-level warranty and invoice metadata.'
+    Assert-True -Condition ([regex]::Matches($SavedAggregate, 'koncz\(\$rep\);').Count -eq 1) -Message 'Saving a replacement should keep exactly one collection finalizer.'
 }
 finally {
     if (Test-Path -LiteralPath $TestOutputRoot -PathType Container) {

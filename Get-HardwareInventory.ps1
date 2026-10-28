@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ScriptVersion = 'v1.0.3'
+$ScriptVersion = 'v1.0.4'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
@@ -3328,7 +3328,15 @@ function Read-NewCollectionName {
             continue
         }
 
-        return [pscustomobject]@{ Name = $Name; Path = $Path; IsNew = $true }
+        $WarrantySuffix = Read-TextValue -Prompt 'Ogólny dopisek gwarancji (opcjonalnie, np. POLAN-36)' -Default $null -AllowEmpty
+        $Invoice = Read-TextValue -Prompt 'Numer faktury za laptopy (opcjonalnie)' -Default $null -AllowEmpty
+        return [pscustomobject]@{
+            Name = $Name
+            Path = $Path
+            IsNew = $true
+            WarrantySuffix = $WarrantySuffix
+            Invoice = $Invoice
+        }
     }
 }
 
@@ -3491,11 +3499,25 @@ function Update-CollectionPhp {
         [AllowNull()][string]$ExistingContent,
         [Parameter(Mandatory)][string]$ServiceTag,
         [Parameter(Mandatory)][string]$Block,
-        [Parameter(Mandatory)][ValidateSet('Add', 'Replace')][string]$Action
+        [Parameter(Mandatory)][ValidateSet('Add', 'Replace')][string]$Action,
+        [AllowNull()][AllowEmptyString()][string]$WarrantySuffix = '',
+        [AllowNull()][AllowEmptyString()][string]$Invoice = ''
     )
 
     if ([string]::IsNullOrWhiteSpace($ExistingContent)) {
-        return "<?php`r`n`r`n$Block`r`n`r`n?>`r`n"
+        $Lines = New-Object System.Collections.Generic.List[string]
+        $Lines.Add('<?php')
+        $Lines.Add(('$dopisekWarranty=''{0}'';' -f (ConvertTo-PhpSingleQuotedValue $WarrantySuffix)))
+        $Lines.Add(('$invoice=''{0}'';' -f (ConvertTo-PhpSingleQuotedValue $Invoice)))
+        $Lines.Add('include "./insert_lib.php";')
+        $Lines.Add(('echo ''$maxIndex: ''.{0}.''<hr>'';' -f '$maxIndex'))
+        $Lines.Add('')
+        $Lines.Add($Block)
+        $Lines.Add('')
+        $Lines.Add('koncz($rep);')
+        $Lines.Add('?>')
+        $Lines.Add('')
+        return ($Lines -join "`r`n")
     }
     if ($ExistingContent -notmatch '^\s*<\?php' -or $ExistingContent -notmatch '\?>\s*$') {
         throw 'Istniejący plik zbiorczy nie ma oczekiwanych znaczników PHP.'
@@ -3508,14 +3530,19 @@ function Update-CollectionPhp {
         if (-not $HasBlock) {
             throw "Nie można bezpiecznie zastąpić rekordu ${ServiceTag}: w pliku zbiorczym brakuje jego znaczników."
         }
-        return [regex]::Replace($ExistingContent, $Pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($Match) $Block }, 1)
+        $UpdatedContent = [regex]::Replace($ExistingContent, $Pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($Match) $Block }, 1)
     }
-    if ($HasBlock) {
+    elseif ($HasBlock) {
         throw "Rekord $ServiceTag już istnieje w pliku zbiorczym."
     }
+    else {
+        $UpdatedContent = $ExistingContent
+        $UpdatedContent = [regex]::Replace($UpdatedContent, '\s*(?:koncz\(\$rep\);\s*)?\?>\s*$', '')
+        $UpdatedContent = "$($UpdatedContent.TrimEnd())`r`n`r`n$Block"
+    }
 
-    $WithoutClosingTag = [regex]::Replace($ExistingContent, '\s*\?>\s*$', '')
-    return "$($WithoutClosingTag.TrimEnd())`r`n`r`n$Block`r`n`r`n?>`r`n"
+    $WithoutFooter = [regex]::Replace($UpdatedContent, '\s*(?:koncz\(\$rep\);\s*)?\?>\s*$', '')
+    return "$($WithoutFooter.TrimEnd())`r`n`r`nkoncz(`$rep);`r`n?>`r`n"
 }
 
 function Write-Utf8NoBomFile {
@@ -3565,7 +3592,15 @@ function Save-InventoryFiles {
         # Odczyt następuje ponownie po uzyskaniu blokady, aby nie nadpisać cudzych zmian.
         $CurrentCollectionContent = if (Test-Path -LiteralPath $CollectionPath -PathType Leaf) { [IO.File]::ReadAllText($CollectionPath) } else { $null }
         $Block = New-CollectionBlock -ServiceTag $ServiceTag -Body $RecordBody
-        $NewCollectionContent = Update-CollectionPhp -ExistingContent $CurrentCollectionContent -ServiceTag $ServiceTag -Block $Block -Action $Action
+        $WarrantySuffix = if ($null -ne $Collection.PSObject.Properties['WarrantySuffix']) { [string]$Collection.WarrantySuffix } else { '' }
+        $Invoice = if ($null -ne $Collection.PSObject.Properties['Invoice']) { [string]$Collection.Invoice } else { '' }
+        $NewCollectionContent = Update-CollectionPhp `
+            -ExistingContent $CurrentCollectionContent `
+            -ServiceTag $ServiceTag `
+            -Block $Block `
+            -Action $Action `
+            -WarrantySuffix $WarrantySuffix `
+            -Invoice $Invoice
 
         Write-Utf8NoBomFile -Path $DeviceTemporaryPath -Content $DeviceContent
         Write-Utf8NoBomFile -Path $CollectionTemporaryPath -Content $NewCollectionContent
