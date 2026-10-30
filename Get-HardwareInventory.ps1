@@ -2226,6 +2226,7 @@ function Get-NetworkAdapterDecision {
         [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Description')
         [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'Name')
     ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1).Trim()
+    $Description = $Description -replace '(?i)\s*\(Personal Area Network\)\s*$', ''
     $PnpDeviceId = Get-NetworkAdapterPnpDeviceId -Adapter $Adapter
     $PhysicalMediaType = [string](Get-OptionalPropertyValue -InputObject $Adapter -Name 'PhysicalMediaType')
     $HardwareInterface = Get-OptionalPropertyValue -InputObject $Adapter -Name 'HardwareInterface'
@@ -2241,8 +2242,7 @@ function Get-NetworkAdapterDecision {
     # Bluetooth PAN jest przez Windows oznaczany jako adapter wirtualny, mimo że
     # reprezentuje fizyczny, zwykle wbudowany moduł Bluetooth.
     if ($PnpDeviceId -match '^(?i)BTH\\' -or $PhysicalMediaType -match '^(?i)Bluetooth$') {
-        $BluetoothDescription = $Description -replace '(?i)\s*\(Personal Area Network\)\s*$', ''
-        return [pscustomobject]@{ Include = $true; Description = $BluetoothDescription; Connection = 'on board'; Reason = 'Bluetooth PAN' }
+        return [pscustomobject]@{ Include = $true; Description = $Description; Connection = 'on board'; Reason = 'Bluetooth PAN' }
     }
 
     $VirtualPattern = '(?i)WAN Miniport|Wi-Fi Direct Virtual|Virtual (?:Ethernet|Switch|Miniport)|VPN|AnyConnect|Hyper-V|Teredo|6to4|IP-HTTPS|Kernel Debug|Loopback'

@@ -593,5 +593,14 @@
         "powerW":  90,
         "other":  "",
         "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 7440",
+        "baseboardFallback":  "Latitude 7440",
+        "memorySpec":  "LPDDR5 6400MHz soldered",
+        "powerMaxW":  65,
+        "powerW":  40,
+        "other":  "",
+        "deviceType":  "laptop"
     }
 ]
