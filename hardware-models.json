@@ -573,7 +573,17 @@
         "powerMaxW":  130,
         "powerW":  90,
         "other":  "",
-        "deviceType":  "laptop"
+        "deviceType":  "laptop",
+        "memoryVariants":  [
+                               {
+                                   "memoryType":  "DDR5",
+                                   "memorySpec":  "DDR5 4800MHz x2, max64GB"
+                               },
+                               {
+                                   "memoryType":  "DDR4",
+                                   "memorySpec":  "DDR4 3200MHz x2, max64GB"
+                               }
+                           ]
     },
     {
         "model":  "Precision 3580",

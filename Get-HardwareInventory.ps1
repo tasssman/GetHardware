@@ -9,13 +9,24 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ScriptVersion = 'v1.0.4'
+$ScriptVersion = 'v1.0.5'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
 
     Write-Host ''
     Write-Host "=== $Title ===" -ForegroundColor Cyan
+}
+
+function Write-NumberedMenu {
+    param(
+        [Parameter(Mandatory)][string[]]$Options,
+        [int]$StartAt = 1
+    )
+
+    for ($Index = 0; $Index -lt $Options.Count; $Index++) {
+        Write-Host ('[{0}] {1}' -f ($StartAt + $Index), $Options[$Index])
+    }
 }
 
 function Confirm-InventoryEnvironment {
@@ -32,8 +43,10 @@ function Confirm-InventoryEnvironment {
     Write-Host '   - stacje dokujące.'
     Write-Host ''
     Write-Warning 'Podłączone urządzenia mogą zostać błędnie zapisane jako podzespoły komputera.'
-    Write-Host '[1] Sprzęt został przygotowany — rozpocznij'
-    Write-Host '[2] Anuluj'
+    Write-NumberedMenu -Options @(
+        'Sprzęt został przygotowany — rozpocznij',
+        'Anuluj'
+    )
     $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
     if ($Choice -eq 2) {
         throw [OperationCanceledException]::new('Anulowano przed rozpoczęciem odczytu sprzętu.')
@@ -248,9 +261,11 @@ function Read-LicenseLabel {
     param([AllowNull()][string]$Current)
 
     Write-Section -Title 'Etykieta systemu'
-    Write-Host '[1] W10P'
-    Write-Host '[2] W11P'
-    Write-Host '[3] Wpisz inną etykietę'
+    Write-NumberedMenu -Options @(
+        'W10P',
+        'W11P',
+        'Wpisz inną etykietę'
+    )
     if (-not [string]::IsNullOrWhiteSpace($Current)) {
         Write-Host "Aktualna wartość: $Current" -ForegroundColor DarkGray
     }
@@ -299,13 +314,15 @@ function Read-InventoryNote {
     while ($true) {
         $DisplayedNote = if ([string]::IsNullOrWhiteSpace($Note)) { '[pusta]' } else { $Note }
         Write-Host "Notatka do zapisu: $DisplayedNote"
-        Write-Host '[1] Akceptuj notatkę'
-        Write-Host '[2] Popraw całą notatkę'
+        Write-NumberedMenu -Options @(
+            'Akceptuj notatkę',
+            'Popraw całą notatkę'
+        )
         $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-2]' -Minimum 1 -Maximum 2
         if ($Choice -eq 1) { return $Note }
 
         $Note = Read-TextValue `
-            -Prompt 'Wpisz poprawioną całą notatkę (puste pole oznacza pustą notatkę)' `
+            -Prompt 'Popraw notatkę (puste = pusta notatka)' `
             -Default $null `
             -AllowEmpty
     }
@@ -641,7 +658,7 @@ function Read-MemorySpecForNewModel {
     }
     Write-Host 'Maksimum podawane przez SMBIOS nie jest używane, ponieważ może być limitem kontrolera, a nie konkretnego modelu.' -ForegroundColor DarkGray
     while ($true) {
-        $Maximum = Read-TextValue -Prompt 'Maksymalna obsługiwana pamięć w GB (sprawdź w dokumentacji producenta)' -Default $null
+        $Maximum = Read-TextValue -Prompt 'Maks. obsługiwana pamięć [GB] (wg dokumentacji producenta)' -Default $null
         $NormalizedMaximum = $Maximum.Replace(',', '.')
         $ParsedMaximum = 0.0
         if ($NormalizedMaximum -match '^\d+(?:\.\d+)?$' -and
@@ -1162,7 +1179,7 @@ function Resolve-MainboardDescription {
     else {
         Write-Warning 'Nie udało się wykryć modelu płyty głównej z Win32_BaseBoard.'
         $BaseBoardDescription = Read-TextValue `
-            -Prompt 'Opis płyty głównej — Enter zatwierdza wartość z bazy, możesz też wpisać własną' `
+            -Prompt 'Opis płyty głównej (Enter = wartość z bazy, lub wpisz własną)' `
             -Default ([string]$ModelEntry.baseboardFallback)
     }
 
@@ -1219,9 +1236,11 @@ function Show-ResolvedModelEntry {
 function Read-ResolvedModelEntryAction {
     Write-Host ''
     Write-Host 'Czy wpis w bazie jest poprawny?'
-    Write-Host '[1] Tak — kontynuuj'
-    Write-Host '[2] Edytuj wpis w JSON'
-    Write-Host '[3] Anuluj'
+    Write-NumberedMenu -Options @(
+        'Tak — kontynuuj',
+        'Edytuj wpis w JSON',
+        'Anuluj'
+    )
     return Read-MenuChoice -Prompt 'Wybierz operację [1-3]' -Minimum 1 -Maximum 3
 }
 
@@ -1955,7 +1974,7 @@ function New-PhysicalDiskPart {
     if ([string]::IsNullOrWhiteSpace($Connection)) {
         Write-Warning "Nie udało się automatycznie ustalić formatu dysku: $Description"
         $Connection = Read-TextValue `
-            -Prompt 'Połączenie/format dysku — Enter zatwierdza podpowiedź, możesz też wpisać własną wartość' `
+            -Prompt 'Połączenie/format dysku (Enter = podpowiedź, lub wpisz własne)' `
             -Default (Get-DiskConnectionDefault -BusType $BusType)
     }
 
@@ -1988,7 +2007,7 @@ function New-Win32DiskPart {
     $DefaultConnection = if ($PnpDeviceId -match '(?i)NVME') { 'M.2' } else { Get-DiskConnectionDefault -BusType $Interface }
     Write-Warning "Dokładne źródło danych dysku jest niedostępne: $Description"
     $Connection = Read-TextValue `
-        -Prompt 'Połączenie/format dysku — Enter zatwierdza podpowiedź, możesz też wpisać własną wartość' `
+        -Prompt 'Połączenie/format dysku (Enter = podpowiedź, lub wpisz własne)' `
         -Default $DefaultConnection
     $Serial = Get-NormalizedDiskSerialNumber `
         -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
@@ -2933,7 +2952,7 @@ function Read-CompleteMemorySpec {
 
     while ($true) {
         $Default = if (Test-MemorySpecIsComplete -Value $DetectedSpec) { $DetectedSpec } else { $null }
-        $Value = Read-TextValue -Prompt 'Wpisz pełną konfigurację pamięci (np. DDR4 3200MHz x2, max64GB albo LPDDR5 8533MHz soldered)' -Default $Default
+        $Value = Read-TextValue -Prompt 'Pełna konfiguracja pamięci (np. DDR4 3200MHz x2, max64GB / LPDDR5 8533MHz soldered)' -Default $Default
         if (Test-MemorySpecIsComplete -Value $Value) { return $Value.Trim() }
         Write-Warning "Pole memorySpec dla modelu '$Model' musi zawierać max...GB albo oznaczenie soldered dla pamięci wlutowanej."
         if (-not [string]::IsNullOrWhiteSpace($DetectedSpec)) {
@@ -3358,7 +3377,7 @@ function Get-HardwareParts {
                     Write-Host 'Pamięć VRAM nie została dodana: Win32_VideoController.AdapterRAM nie jest wystarczająco wiarygodnym źródłem.' -ForegroundColor DarkGray
                 }
                 $Connection = Read-TextValue `
-                    -Prompt 'Wpisz połączenia/wyjścia graficzne, oddzielając je przecinkami (np. on board,HDMI,DisplayPort,USB-C)' `
+                    -Prompt 'Połączenia/wyjścia grafiki (po przecinku, np. on board,HDMI,DisplayPort,USB-C)' `
                     -Default 'on board'
                 $Parts.Add((New-HardwarePart -Type 'Graphic Card' -Description $Description -Connection $Connection))
             }
@@ -3527,7 +3546,7 @@ function Show-HardwareParts {
     Write-Section -Title 'Procesor'
     Write-Host "Model:               $Processor"
     Write-Host "Rdzenie fizyczne:     $CoreCount"
-    Write-Host "Taktowanie (mhz):     $ClockSpeedMhz"
+    Write-Host "Taktowanie (MHz):     $ClockSpeedMhz"
 
     Write-Section -Title 'Płyta główna'
     Write-Host $Mainboard
@@ -3607,12 +3626,14 @@ function Review-HardwareParts {
             -CoreCount $CoreCount `
             -ClockSpeedMhz $ClockSpeedMhz `
             -Mainboard $Mainboard
-        Write-Host '[1] Zaakceptuj listę'
-        Write-Host '[2] Edytuj wybrany element'
-        Write-Host '[3] Dodaj element'
-        Write-Host '[4] Usuń element'
-        Write-Host '[5] Odczytaj sprzęt ponownie'
-        Write-Host '[6] Anuluj'
+        Write-NumberedMenu -Options @(
+            'Zaakceptuj listę',
+            'Edytuj wybrany element',
+            'Dodaj element',
+            'Usuń element',
+            'Odczytaj sprzęt ponownie',
+            'Anuluj'
+        )
         $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-6]' -Minimum 1 -Maximum 6
 
         switch ($Choice) {
@@ -3744,9 +3765,11 @@ function Get-ExistingDeviceAction {
     if (-not $Exists) { return 'Add' }
 
     Write-Warning "Urządzenie $ServiceTag już istnieje w spisie '$($Collection.Name)'."
-    Write-Host '[1] Zastąp istniejący rekord'
-    Write-Host '[2] Pomiń zapis'
-    Write-Host '[3] Anuluj'
+    Write-NumberedMenu -Options @(
+        'Zastąp istniejący rekord',
+        'Pomiń zapis',
+        'Anuluj'
+    )
     $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-3]' -Minimum 1 -Maximum 3
     switch ($Choice) {
         1 { return 'Replace' }
@@ -3970,20 +3993,22 @@ function Show-InventorySummary {
         [Parameter(Mandatory)][psobject]$Collection
     )
 
+    $NoteText = if ([string]::IsNullOrWhiteSpace([string]$Inventory.Note)) { '[pusta]' } else { [string]$Inventory.Note }
+
     Write-Section -Title 'Podsumowanie'
-    Write-Host "Spis:          $($Collection.Name)"
-    Write-Host "Service Tag:   $($Inventory.ServiceTag)"
-    Write-Host "Model:         $($Inventory.Model)"
-    Write-Host "Płyta główna:  $($Inventory.Mainboard)"
-    Write-Host "Bought:        $($Inventory.Bought)"
-    Write-Host "Gwarancja:     $($Inventory.Warranty)"
-    Write-Host "Cena netto:    $($Inventory.Price) PLN"
-    Write-Host "Etykieta:      $($Inventory.Label)"
-    Write-Host "Pomieszczenie: $($Inventory.Room)"
-    Write-Host "Notatka:       $($Inventory.Note)"
-    Write-Host "Podzespoły:    $($Parts.Count)"
-    Write-Host "Plik sprzętu:  $(Join-Path $Collection.Path "$($Inventory.ServiceTag).php")"
-    Write-Host "Plik zbiorczy: $(Join-Path $Collection.Path "$($Collection.Name).php")"
+    Write-Host "Spis:             $($Collection.Name)"
+    Write-Host "Service Tag:      $($Inventory.ServiceTag)"
+    Write-Host "Model:            $($Inventory.Model)"
+    Write-Host "Płyta główna:     $($Inventory.Mainboard)"
+    Write-Host "Data zakupu:      $($Inventory.Bought)"
+    Write-Host "Gwarancja:        $($Inventory.Warranty)"
+    Write-Host "Cena netto:       $($Inventory.Price) PLN"
+    Write-Host "Etykieta:         $($Inventory.Label)"
+    Write-Host "Pomieszczenie:    $($Inventory.Room)"
+    Write-Host "Notatka:          $NoteText"
+    Write-Host "Liczba podzespołów: $($Parts.Count)"
+    Write-Host "Plik urządzenia:  $(Join-Path $Collection.Path "$($Inventory.ServiceTag).php")"
+    Write-Host "Plik spisu:       $(Join-Path $Collection.Path "$($Collection.Name).php")"
 
     $IdentifierSuffix = if ($Inventory.DeviceType -in @('laptop', 'tablet')) { '_laptop' } else { '' }
     Write-Section -Title 'Typ urządzenia'
@@ -4129,10 +4154,12 @@ function Invoke-HardwareInventory {
         }
 
         Show-InventorySummary -Inventory $Inventory -Parts $Parts -Collection $Collection
-        Write-Host '[1] Zapisz pliki PHP'
-        Write-Host '[2] Popraw dane ręczne'
-        Write-Host '[3] Wróć do edycji podzespołów'
-        Write-Host '[4] Anuluj'
+        Write-NumberedMenu -Options @(
+            'Zapisz pliki PHP',
+            'Popraw dane ręczne',
+            'Wróć do edycji podzespołów',
+            'Anuluj'
+        )
         $FinalChoice = Read-MenuChoice -Prompt 'Wybierz operację [1-4]' -Minimum 1 -Maximum 4
         if ($FinalChoice -eq 1) { break }
         if ($FinalChoice -eq 2) {

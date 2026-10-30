@@ -1,3 +1,9 @@
+# Zmiany w wersji v1.0.5
+
+- Ujednolicenie numerowanych menu w konsoli przez wspólny helper, aby skrócić kod i poprawić czytelność interakcji.
+- Skrócenie najdłuższych promptów operatorskich bez zmiany logiki działania.
+- Czytelniejsze podsumowanie przed zapisem (bardziej jednoznaczne etykiety oraz jawne `[pusta]` dla pustej notatki).
+
 # Zmiany w wersji v1.0.4
 
 - Nowy spis zapisuje opcjonalny ogólny dopisek gwarancji i numer faktury w nagłówku pliku zbiorczego, który dołącza `insert_lib.php`, wyświetla `$maxIndex` i kończy przetwarzanie wywołaniem `koncz($rep)`.
