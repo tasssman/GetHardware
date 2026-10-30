@@ -1938,6 +1938,17 @@ function Convert-DiskFormFactorToConnection {
     }
 }
 
+function Test-UsbDisk {
+    param([Parameter(Mandatory)][psobject]$Disk)
+
+    $BusType = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'BusType')
+    $InterfaceType = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'InterfaceType')
+    $PnpDeviceId = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'PNPDeviceID')
+    return ($BusType.Trim() -ieq 'USB' -or
+        $InterfaceType.Trim() -ieq 'USB' -or
+        $PnpDeviceId -match '^(?i)USB\\')
+}
+
 function New-PhysicalDiskPart {
     param([Parameter(Mandatory)][psobject]$Disk)
 
@@ -1966,9 +1977,13 @@ function New-PhysicalDiskPart {
     }
 
     $NativeFormat = $null
-    try { $NativeFormat = Get-NativeDiskFormFactor -DiskNumber $DiskNumber }
-    catch { $NativeFormat = $null }
-    $Connection = if ($null -ne $NativeFormat) {
+    if (-not (Test-UsbDisk -Disk $Disk)) {
+        try { $NativeFormat = Get-NativeDiskFormFactor -DiskNumber $DiskNumber }
+        catch { $NativeFormat = $null }
+    }
+    $Connection = if (Test-UsbDisk -Disk $Disk) {
+        'USB'
+    } elseif ($null -ne $NativeFormat) {
         Convert-DiskFormFactorToConnection -FormFactor ([string]$NativeFormat.Name)
     } else { '' }
     if ([string]::IsNullOrWhiteSpace($Connection)) {
@@ -2004,11 +2019,21 @@ function New-Win32DiskPart {
     $Description = "${CapacityGb}GB $Model".Trim()
     $Interface = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'InterfaceType')
     $PnpDeviceId = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'PNPDeviceID')
-    $DefaultConnection = if ($PnpDeviceId -match '(?i)NVME') { 'M.2' } else { Get-DiskConnectionDefault -BusType $Interface }
-    Write-Warning "Dokładne źródło danych dysku jest niedostępne: $Description"
-    $Connection = Read-TextValue `
-        -Prompt 'Połączenie/format dysku (Enter = podpowiedź, lub wpisz własne)' `
-        -Default $DefaultConnection
+    $DefaultConnection = if (Test-UsbDisk -Disk $Disk) {
+        'USB'
+    } elseif ($PnpDeviceId -match '(?i)NVME') {
+        'M.2'
+    } else {
+        Get-DiskConnectionDefault -BusType $Interface
+    }
+    if (Test-UsbDisk -Disk $Disk) {
+        $Connection = 'USB'
+    } else {
+        Write-Warning "Dokładne źródło danych dysku jest niedostępne: $Description"
+        $Connection = Read-TextValue `
+            -Prompt 'Połączenie/format dysku (Enter = podpowiedź, lub wpisz własne)' `
+            -Default $DefaultConnection
+    }
     $Serial = Get-NormalizedDiskSerialNumber `
         -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
         -UniqueId ''
@@ -2022,6 +2047,18 @@ function New-Win32DiskPart {
     return $Part
 }
 
+function Confirm-UsbDiskInventoryPart {
+    param([Parameter(Mandatory)][psobject]$DiskPart)
+
+    Write-Section -Title 'Wykryto dysk USB'
+    Write-Host "Opis:          $($DiskPart.Desc)"
+    Write-Host "Połączenie:    $($DiskPart.Conn)"
+    $Serial = if ([string]::IsNullOrWhiteSpace([string]$DiskPart.Sn)) { 'brak danych' } else { $DiskPart.Sn }
+    Write-Host "Numer seryjny: $Serial"
+    Show-DiskHealthInformation -Parts @($DiskPart)
+    return Read-YesNo -Prompt 'Czy dodać ten dysk USB do listy sprzętu? [T/N]'
+}
+
 function Get-DiskInventoryParts {
     $Parts = New-Object System.Collections.Generic.List[object]
     $PhysicalDisks = @()
@@ -2030,7 +2067,13 @@ function Get-DiskInventoryParts {
 
     if ($PhysicalDisks.Count -gt 0) {
         foreach ($Disk in $PhysicalDisks) {
-            try { $Parts.Add((New-PhysicalDiskPart -Disk $Disk)) }
+            try {
+                $Part = New-PhysicalDiskPart -Disk $Disk
+                if ((Test-UsbDisk -Disk $Disk) -and -not (Confirm-UsbDiskInventoryPart -DiskPart $Part)) {
+                    continue
+                }
+                $Parts.Add($Part)
+            }
             catch {
                 $Identity = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'FriendlyName')
                 Write-Warning "Pominięto dysk '$Identity': $($_.Exception.Message)"
@@ -2040,7 +2083,13 @@ function Get-DiskInventoryParts {
     else {
         try {
             foreach ($Disk in @(Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction Stop)) {
-                try { $Parts.Add((New-Win32DiskPart -Disk $Disk)) }
+                try {
+                    $Part = New-Win32DiskPart -Disk $Disk
+                    if ((Test-UsbDisk -Disk $Disk) -and -not (Confirm-UsbDiskInventoryPart -DiskPart $Part)) {
+                        continue
+                    }
+                    $Parts.Add($Part)
+                }
                 catch {
                     $Identity = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'Model')
                     Write-Warning "Pominięto dysk '$Identity': $($_.Exception.Message)"

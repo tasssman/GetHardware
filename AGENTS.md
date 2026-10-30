@@ -4,6 +4,7 @@
 - Nie wprowadzaj zmian tylko dlatego, że znalazłeś możliwe ulepszenie.
 - Nie cofaj ani nie nadpisuj istniejących zmian użytkownika.
 - Po zatwierdzonej zmianie uruchom pełne testy.
+- Po każdej wykonanej zmianie podaj krótką notatkę do commita w języku angielskim.
 - Pracuj zgodnie z Windows PowerShell 5.1.
 - Produkcyjny katalog to `\\ntshare\helpdesk\scripts\GetHardware`.
 - Produkcyjny `hardware-models.json` jest nadrzędnym źródłem danych, ponieważ podczas inwentaryzacji dopisywane są tam nowe modele.

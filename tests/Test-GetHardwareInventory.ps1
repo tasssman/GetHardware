@@ -73,6 +73,9 @@ Assert-True -Condition ($ParsedHealthLog.DataUnitsWritten -eq 1000000) -Message 
 Assert-True -Condition ($ParsedHealthLog.PowerOnHours -eq 2400) -Message 'The NVMe health parser should read PowerOnHours.'
 
 $script:FailedCimClass = $null
+$script:MockPhysicalDiskList = $null
+$script:MockPhysicalDiskFailure = $false
+$script:MockWin32DiskDriveList = $null
 
 function Get-PnpDevice {
     param([switch]$PresentOnly, $ErrorAction)
@@ -84,6 +87,12 @@ function Get-PnpDeviceProperty {
 }
 function Get-PhysicalDisk {
     param($ErrorAction)
+    if ($script:MockPhysicalDiskFailure) {
+        throw 'Mocked Get-PhysicalDisk failure.'
+    }
+    if ($null -ne $script:MockPhysicalDiskList) {
+        return @($script:MockPhysicalDiskList)
+    }
     return [pscustomobject]@{
         DeviceId          = '0'
         FriendlyName      = 'EG6 KIOXIA 512GB'
@@ -261,6 +270,9 @@ function Get-CimInstance {
             }
         }
         'Win32_DiskDrive' {
+            if ($null -ne $script:MockWin32DiskDriveList) {
+                return @($script:MockWin32DiskDriveList)
+            }
             return [pscustomobject]@{
                 Size          = 256000000000
                 Model         = 'TEST NVME'
@@ -764,6 +776,57 @@ Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Sound Card').
 Assert-True -Condition (@($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Count -eq 1) -Message 'Software and remote display adapters should be excluded.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Conn -eq 'on board,HDMI,USB-C') -Message 'The user-entered graphics outputs should be preserved.'
 Assert-True -Condition (($DetectedMockParts | Where-Object Pt -EQ 'Graphic Card').Desc -eq 'Intel(R) UHD Graphics') -Message 'The mocked integrated GPU should not contain an AdapterRAM prefix.'
+
+$MockInternalDisk = Get-PhysicalDisk
+$MockUsbDisk = [pscustomobject]@{
+    DeviceId          = '1'
+    FriendlyName      = 'Portable SSD 256GB'
+    Model             = 'Portable SSD 256GB'
+    SerialNumber      = 'USB-TEST-1234'
+    FirmwareVersion   = '1.0'
+    MediaType         = 'SSD'
+    BusType           = 'USB'
+    Size              = 256000000000
+    HealthStatus      = 'Healthy'
+    OperationalStatus = 'OK'
+    PhysicalLocation  = 'USB'
+    UniqueId          = 'USB-TEST-1234'
+}
+$script:MockPhysicalDiskList = @($MockInternalDisk, $MockUsbDisk)
+$script:MockReadHostPrompts.Clear()
+$script:MockReadHostQueue.Enqueue('T')
+$AcceptedUsbDiskParts = @(Get-DiskInventoryParts)
+Assert-True -Condition ($AcceptedUsbDiskParts.Count -eq 2) -Message 'A USB disk should be added after user confirmation, without omitting internal disks.'
+$AcceptedUsbPart = $AcceptedUsbDiskParts | Where-Object Desc -Like '*Portable*'
+Assert-True -Condition ($null -ne $AcceptedUsbPart) -Message 'The confirmed USB disk should be present in the hardware list.'
+Assert-True -Condition ($AcceptedUsbPart.Conn -eq 'USB') -Message 'A confirmed USB disk should use USB as its connection.'
+Assert-True -Condition ($script:MockReadHostQueue.Count -eq 0) -Message 'The detected USB disk should consume a user confirmation response.'
+
+$script:MockPhysicalDiskList = @($MockUsbDisk)
+$script:MockReadHostPrompts.Clear()
+$script:MockReadHostQueue.Enqueue('N')
+$DeclinedUsbDiskParts = @(Get-DiskInventoryParts)
+Assert-True -Condition ($DeclinedUsbDiskParts.Count -eq 0) -Message 'A USB disk should be omitted after user rejection.'
+Assert-True -Condition ($script:MockReadHostQueue.Count -eq 0) -Message 'A rejected USB disk should consume a user confirmation response.'
+
+$script:MockPhysicalDiskFailure = $true
+$script:MockWin32DiskDriveList = @(
+    [pscustomobject]@{
+        Size          = 128000000000
+        Model         = 'USB Flash Drive'
+        SerialNumber  = 'USB-FALLBACK-123'
+        PNPDeviceID   = 'USB\VID_1234&PID_5678'
+        InterfaceType = 'SCSI'
+    }
+)
+$script:MockReadHostPrompts.Clear()
+$script:MockReadHostQueue.Enqueue('N')
+$FallbackUsbDiskParts = @(Get-DiskInventoryParts)
+Assert-True -Condition ($FallbackUsbDiskParts.Count -eq 0) -Message 'A USB disk detected through Win32_DiskDrive should be omitted after rejection.'
+Assert-True -Condition ($script:MockReadHostQueue.Count -eq 0) -Message 'A USB disk from the Win32_DiskDrive fallback should consume a user confirmation response.'
+$script:MockPhysicalDiskFailure = $false
+$script:MockPhysicalDiskList = $null
+$script:MockWin32DiskDriveList = $null
 
 $Inventory = [pscustomobject]@{
     ServiceTag    = '13QJ7D3'

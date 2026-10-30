@@ -39,6 +39,8 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 W podsumowaniu pusta notatka jest pokazywana jawnie jako `[pusta]`, aby łatwiej wychwycić brak danych przed zapisem.
 
+Wykryty dysk USB jest pokazywany wraz z opisem, połączeniem, numerem seryjnym i dostępnymi danymi diagnostycznymi. Skrypt pyta, czy dodać go do listy sprzętu; po odmowie pomija tylko ten dysk.
+
 Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 
 ### Identyfikacja modelu
