@@ -100,7 +100,7 @@ Jeżeli ten sam model występuje z różnymi generacjami pamięci, pozostaw jede
 ]
 ```
 
-Jeśli wykryty typ RAM-u pasuje dokładnie do jednego wariantu, skrypt wybiera go automatycznie. Przy braku pewnego dopasowania pokazuje warianty do wyboru. Gdy wykryje nową generację, użytkownik może dopisać ją do `memoryVariants`; dotychczasowy `memorySpec` pozostaje wtedy zachowany jako pierwszy wariant. Skrypt prosi o pełną konfigurację z potwierdzonym limitem pojemności albo oznaczeniem `soldered`. Można też użyć konfiguracji tylko dla bieżącego komputera, bez zmiany wspólnego JSON-u.
+Jeśli wykryty typ RAM-u pasuje dokładnie do jednego wariantu, skrypt wybiera go automatycznie. Przy braku pewnego dopasowania pokazuje warianty do wyboru. Gdy wykryje nową generację, użytkownik może dopisać ją do `memoryVariants`; dotychczasowy `memorySpec` pozostaje wtedy zachowany jako pierwszy wariant. Skrypt wstępnie uzupełnia wykrytą konfigurację i znany limit pojemności w polu edycji. Użytkownik może ją poprawić albo zatwierdzić klawiszem Enter. Można też użyć konfiguracji tylko dla bieżącego komputera, bez zmiany wspólnego JSON-u.
 
 Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy generacji użytkownik może zapisać wykrytą konfigurację jako nowy wariant, zachować wartość z bazy, użyć jej tylko dla bieżącego komputera albo wpisać własną. Nowy wariant trafia do JSON-u tylko po jednoznacznym wyborze użytkownika i jest zapisywany przez zweryfikowany plik tymczasowy.
 

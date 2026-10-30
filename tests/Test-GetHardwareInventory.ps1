@@ -502,20 +502,22 @@ function Read-Host {
     param([string]$Prompt)
     $script:MockReadHostPrompts.Add([string]$Prompt)
     $Value = $script:MockReadHostValue
+    $HadQueuedInput = $false
     if ($script:MockReadHostQueue.Count -gt 0) {
+        $HadQueuedInput = $true
         $Value = $script:MockReadHostQueue.Dequeue()
     }
-    if ([string]::IsNullOrEmpty($Value) -and $Prompt -eq $script:MockReadHostLastPrompt) {
+    if (-not $HadQueuedInput -and [string]::IsNullOrEmpty($Value) -and $Prompt -eq $script:MockReadHostLastPrompt) {
         $script:MockReadHostRepeatedEmptyPrompt++
     }
-    elseif ([string]::IsNullOrEmpty($Value)) {
+    elseif (-not $HadQueuedInput -and [string]::IsNullOrEmpty($Value)) {
         $script:MockReadHostRepeatedEmptyPrompt = 1
     }
     else {
         $script:MockReadHostRepeatedEmptyPrompt = 0
     }
     $script:MockReadHostLastPrompt = [string]$Prompt
-    if (($script:MockReadHostStrict -and [string]::IsNullOrEmpty($Value)) -or $script:MockReadHostRepeatedEmptyPrompt -ge 3) {
+    if (($script:MockReadHostStrict -and -not $HadQueuedInput -and [string]::IsNullOrEmpty($Value)) -or $script:MockReadHostRepeatedEmptyPrompt -ge 3) {
         throw "No mocked input remains for prompt '$Prompt'."
     }
     return $Value
@@ -686,6 +688,7 @@ try {
     Assert-True -Condition ([IO.File]::ReadAllText($MemoryVariantTestDatabase) -eq $VariantDatabaseContentBeforeSelections) -Message 'Selecting model memory variants should not modify the shared model database.'
 
     $script:MockReadHostQueue.Enqueue('4')
+    # Replace the prefilled max with another manually approved value.
     $script:MockReadHostQueue.Enqueue('DDR3 1600MHz x2, max32GB')
     $AddedVariantSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $UnknownGenerationMemory -DatabasePath $MemoryVariantTestDatabase
     $ModelsAfterVariantAdd = @(Import-ModelDatabase -Path $MemoryVariantTestDatabase)
@@ -699,7 +702,7 @@ try {
     [IO.File]::WriteAllText($LegacyVariantDatabase, $InitialJson, (New-Object System.Text.UTF8Encoding($false)))
     $LegacyModelEntry = @(Import-ModelDatabase -Path $LegacyVariantDatabase)[0]
     $script:MockReadHostQueue.Enqueue('1')
-    $script:MockReadHostQueue.Enqueue('DDR5 4800MHz x2, max64GB')
+    $script:MockReadHostQueue.Enqueue('')
     $LegacyAddedVariantSpec = Resolve-MemorySpec -ModelEntry $LegacyModelEntry -MemoryInventory $Ddr5VariantMemory -DatabasePath $LegacyVariantDatabase
     $LegacyModelAfterAdd = @(Import-ModelDatabase -Path $LegacyVariantDatabase)[0]
     Assert-True -Condition ($LegacyAddedVariantSpec -eq 'DDR5 4800MHz x2, max64GB') -Message 'A legacy model without memoryVariants should allow saving a detected different generation.'

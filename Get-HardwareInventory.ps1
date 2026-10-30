@@ -88,7 +88,8 @@ function Read-EditableTextValue {
     param(
         [Parameter(Mandatory)][string]$Prompt,
         [AllowNull()][string]$Default,
-        [switch]$AllowEmpty
+        [switch]$AllowEmpty,
+        [switch]$CompactPrompt
     )
 
     if ([Console]::IsInputRedirected) {
@@ -98,7 +99,8 @@ function Read-EditableTextValue {
     $RawUi = $Host.UI.RawUI
     $InitialText = if ($null -eq $Default) { '' } else { $Default }
     while ($true) {
-        Write-Host "$Prompt (Enter zatwierdza, strzałki edytują): " -NoNewline
+        $PromptText = if ($CompactPrompt) { "${Prompt}: " } else { "$Prompt (Enter zatwierdza, strzałki edytują): " }
+        Write-Host $PromptText -NoNewline
         $StartPosition = $RawUi.CursorPosition
         $Text = $InitialText
         $CursorIndex = $Text.Length
@@ -2940,6 +2942,22 @@ function Read-CompleteMemorySpec {
     }
 }
 
+function Read-ConfirmedMemoryVariantSpec {
+    param(
+        [Parameter(Mandatory)][string]$Model,
+        [Parameter(Mandatory)][string]$DetectedBaseSpec,
+        [Parameter(Mandatory)][string]$ReferenceSpec
+    )
+
+    $DefaultSpec = Get-DetectedMemorySpecForVariant -DetectedBaseSpec $DetectedBaseSpec -VariantSpec $ReferenceSpec
+    $Value = $DefaultSpec
+    while ($true) {
+        $Value = Read-EditableTextValue -Prompt 'Potwierdź wprowadzaną nową konfigurację pamięci' -Default $Value -CompactPrompt
+        if (Test-MemorySpecIsComplete -Value $Value) { return $Value.Trim() }
+        Write-Warning "Konfiguracja pamięci dla modelu '$Model' musi zawierać max...GB albo oznaczenie soldered."
+    }
+}
+
 function Get-MemoryTypeFromSpec {
     param([AllowNull()][string]$Value)
 
@@ -3007,7 +3025,10 @@ function Resolve-MemoryVariantSpec {
             Write-Host "[$AddVariantChoice] Zapisz wykrytą konfigurację jako nowy wariant w JSON"
             $Choice = Read-MenuChoice -Prompt "Wybierz wariant RAM [1-$AddVariantChoice]" -Minimum 1 -Maximum $AddVariantChoice
             if ($Choice -eq $AddVariantChoice) {
-                $NewVariantSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+                $NewVariantSpec = Read-ConfirmedMemoryVariantSpec `
+                    -Model ([string]$ModelEntry.model) `
+                    -DetectedBaseSpec $DetectedBaseSpec `
+                    -ReferenceSpec ([string]$ModelEntry.memorySpec)
                 Set-ModelMemoryVariant -DatabasePath $DatabasePath -ModelEntry $ModelEntry -MemoryType $DetectedType -MemorySpec $NewVariantSpec
                 return $NewVariantSpec
             }
@@ -3183,7 +3204,10 @@ function Resolve-MemorySpec {
         $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-4]' -Minimum 1 -Maximum 4
         switch ($Choice) {
             1 {
-                $NewVariantSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+                $NewVariantSpec = Read-ConfirmedMemoryVariantSpec `
+                    -Model ([string]$ModelEntry.model) `
+                    -DetectedBaseSpec $DetectedBaseSpec `
+                    -ReferenceSpec $DatabaseSpec
                 Set-ModelMemoryVariant -DatabasePath $DatabasePath -ModelEntry $ModelEntry -MemoryType $DetectedType -MemorySpec $NewVariantSpec
                 return $NewVariantSpec
             }

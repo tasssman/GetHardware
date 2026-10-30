@@ -113,7 +113,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
 - [x] Bezpiecznie obsługiwać różne warianty RAM-u pod tą samą nazwą modelu.
   - Utrzymać jeden unikalny wpis modelu z opcjonalną listą `memoryVariants`.
   - Automatycznie wybrać wariant na podstawie wiarygodnie wykrytej generacji RAM-u; przy braku dopasowania pozwolić wybrać wariant albo użyć konfiguracji tylko dla bieżącego komputera.
-  - Pozwolić użytkownikowi dopisać wykrytą nową generację jako wariant, zachowując dotychczasową konfigurację.
+  - Pozwolić użytkownikowi dopisać wykrytą nową generację jako wariant, zachowując dotychczasową konfigurację; prefill wykryte dane i znany limit w edytowalnym polu potwierdzenia.
   - Nie zmieniać wspólnego JSON-u przy wyborze konfiguracji dla bieżącego urządzenia.
   - Testować warianty DDR4/DDR5 oraz przypadek bez wiarygodnego wykrycia.
 
