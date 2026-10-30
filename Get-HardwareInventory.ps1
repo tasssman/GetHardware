@@ -84,6 +84,88 @@ function Read-TextValue {
     }
 }
 
+function Read-EditableTextValue {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [AllowNull()][string]$Default,
+        [switch]$AllowEmpty
+    )
+
+    if ([Console]::IsInputRedirected) {
+        return Read-TextValue -Prompt "$Prompt (edytuj tekst albo naciśnij Enter, aby zachować)" -Default $Default -AllowEmpty:$AllowEmpty
+    }
+
+    $RawUi = $Host.UI.RawUI
+    $InitialText = if ($null -eq $Default) { '' } else { $Default }
+    while ($true) {
+        Write-Host "$Prompt (Enter zatwierdza, strzałki edytują): " -NoNewline
+        $StartPosition = $RawUi.CursorPosition
+        $Text = $InitialText
+        $CursorIndex = $Text.Length
+        $RenderedLength = $Text.Length
+        if ($Text.Length -gt 0) { Write-Host $Text -NoNewline }
+
+        while ($true) {
+            $Key = $RawUi.ReadKey([System.Management.Automation.Host.ReadKeyOptions]::NoEcho -bor [System.Management.Automation.Host.ReadKeyOptions]::IncludeKeyDown)
+            $Changed = $true
+            switch ($Key.VirtualKeyCode) {
+                3 { throw [OperationCanceledException]::new('Anulowano edycję wartości.') }
+                8 {
+                    if ($CursorIndex -gt 0) {
+                        $Text = $Text.Remove($CursorIndex - 1, 1)
+                        $CursorIndex--
+                    }
+                    else { $Changed = $false }
+                }
+                13 {
+                    $Value = $Text.Trim()
+                    if (-not $AllowEmpty -and [string]::IsNullOrWhiteSpace($Value)) {
+                        Write-Host ''
+                        Write-Warning 'Wartość nie może być pusta.'
+                        $InitialText = ''
+                        break
+                    }
+                    Write-Host ''
+                    return $Value
+                }
+                35 { $CursorIndex = $Text.Length; $Changed = $false }
+                36 { $CursorIndex = 0; $Changed = $false }
+                37 { if ($CursorIndex -gt 0) { $CursorIndex-- }; $Changed = $false }
+                39 { if ($CursorIndex -lt $Text.Length) { $CursorIndex++ }; $Changed = $false }
+                46 {
+                    if ($CursorIndex -lt $Text.Length) { $Text = $Text.Remove($CursorIndex, 1) }
+                    else { $Changed = $false }
+                }
+                default {
+                    if (-not [char]::IsControl($Key.Character)) {
+                        $Text = $Text.Insert($CursorIndex, [string]$Key.Character)
+                        $CursorIndex++
+                    }
+                    else { $Changed = $false }
+                }
+            }
+
+            if ($Key.VirtualKeyCode -eq 13 -and -not $AllowEmpty -and [string]::IsNullOrWhiteSpace($Text)) {
+                break
+            }
+            if ($Changed) {
+                $RawUi.CursorPosition = $StartPosition
+                $DisplayText = $Text + (' ' * [Math]::Max(0, $RenderedLength - $Text.Length))
+                if ($DisplayText.Length -gt 0) { Write-Host $DisplayText -NoNewline }
+                $RenderedLength = $Text.Length
+            }
+
+            $BufferWidth = [int]$RawUi.BufferSize.Width
+            $LinearPosition = [int]$StartPosition.X + $CursorIndex
+            $CursorPosition = New-Object System.Management.Automation.Host.Coordinates (
+                [int]($LinearPosition % $BufferWidth),
+                [int]($StartPosition.Y + [Math]::Floor($LinearPosition / $BufferWidth))
+            )
+            $RawUi.CursorPosition = $CursorPosition
+        }
+    }
+}
+
 function Read-NonNegativeInteger {
     param(
         [Parameter(Mandatory)][string]$Prompt,
@@ -300,6 +382,35 @@ function Import-ModelDatabase {
         }
         if (-not [int]::TryParse([string]$Entry.powerW, [ref]$Power) -or $Power -lt 0) {
             throw "Model '$($Entry.model)' ma nieprawidłowe powerW."
+        }
+
+        if ($null -ne $Entry.PSObject.Properties['memoryVariants']) {
+            $VariantTypes = New-Object System.Collections.Generic.List[string]
+            $Variants = @($Entry.memoryVariants)
+            if ($Variants.Count -eq 0) {
+                throw "Model '$($Entry.model)' ma puste pole memoryVariants."
+            }
+            foreach ($Variant in $Variants) {
+                foreach ($PropertyName in @('memoryType', 'memorySpec')) {
+                    if ($PropertyName -notin $Variant.PSObject.Properties.Name) {
+                        throw "Wariant pamięci modelu '$($Entry.model)' nie zawiera pola '$PropertyName'."
+                    }
+                }
+
+                $VariantType = ([string]$Variant.memoryType).Trim().ToUpperInvariant()
+                $VariantSpec = ([string]$Variant.memorySpec).Trim()
+                if ([string]::IsNullOrWhiteSpace($VariantType) -or
+                    (Get-MemoryTypeFromSpec -Value $VariantSpec) -ne $VariantType -or
+                    -not (Test-MemorySpecIsComplete -Value $VariantSpec)) {
+                    throw "Model '$($Entry.model)' ma nieprawidłowy wariant pamięci '$VariantType'."
+                }
+                $VariantTypes.Add($VariantType)
+            }
+
+            $DuplicateVariantTypes = @($VariantTypes | Group-Object | Where-Object Count -gt 1)
+            if ($DuplicateVariantTypes.Count -gt 0) {
+                throw "Model '$($Entry.model)' zawiera powtórzony wariant RAM: $($DuplicateVariantTypes[0].Name)."
+            }
         }
     }
 
@@ -2829,6 +2940,101 @@ function Read-CompleteMemorySpec {
     }
 }
 
+function Get-MemoryTypeFromSpec {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    $Match = [regex]::Match($Value, '(?i)(?<type>LPDDR\d*|DDR\d+[A-Z]*|HBM\d*)\b')
+    if (-not $Match.Success) { return '' }
+    return $Match.Groups['type'].Value.ToUpperInvariant()
+}
+
+function Get-DetectedMemorySpecForVariant {
+    param(
+        [Parameter(Mandatory)][string]$DetectedBaseSpec,
+        [Parameter(Mandatory)][string]$VariantSpec
+    )
+
+    if ($DetectedBaseSpec -match '(?i)\bsoldered\b') { return $DetectedBaseSpec }
+    $MaximumText = Get-MemorySpecMaximumText -Value $VariantSpec
+    if ([string]::IsNullOrWhiteSpace($MaximumText)) { return $DetectedBaseSpec }
+    return "$DetectedBaseSpec, $MaximumText"
+}
+
+function Resolve-MemoryVariantSpec {
+    param(
+        [Parameter(Mandatory)][psobject]$ModelEntry,
+        [Parameter(Mandatory)][psobject]$MemoryInventory,
+        [Parameter(Mandatory)][string]$DatabasePath
+    )
+
+    $Variants = @($ModelEntry.memoryVariants)
+    $DetectedBaseSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
+    $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedBaseSpec)
+    $DetectedType = if ($DetectedReliable) { Get-MemoryTypeFromSpec -Value $DetectedBaseSpec } else { '' }
+    $DetectedMatches = @($Variants | Where-Object { ([string]$_.memoryType).Trim() -ieq $DetectedType })
+
+    if ($DetectedReliable -and $DetectedMatches.Count -eq 1) {
+        $SelectedVariant = $DetectedMatches[0]
+        $ResolvedSpec = Get-DetectedMemorySpecForVariant -DetectedBaseSpec $DetectedBaseSpec -VariantSpec ([string]$SelectedVariant.memorySpec)
+        Write-Host "Wybrano wariant RAM $($SelectedVariant.memoryType) z hardware-models.json: $ResolvedSpec" -ForegroundColor Green
+        return $ResolvedSpec
+    }
+
+    Write-Section -Title 'Wariant pamięci RAM'
+    if ($DetectedReliable) {
+        Write-Host "Wykryta konfiguracja: $DetectedBaseSpec" -ForegroundColor Green
+        if ([string]::IsNullOrWhiteSpace($DetectedType)) {
+            Write-Warning 'Nie udało się rozpoznać generacji wykrytej pamięci.'
+        }
+        elseif ($DetectedMatches.Count -eq 0) {
+            Write-Warning "Generacja $DetectedType nie występuje w wariantach modelu '$($ModelEntry.model)' zapisanych w JSON-ie."
+        }
+    }
+    else {
+        Write-MemorySpecDetectionWarning -MemoryInventory $MemoryInventory
+    }
+
+    for ($Index = 0; $Index -lt $Variants.Count; $Index++) {
+        Write-Host ('[{0}] Użyj wariantu {1}: {2}' -f ($Index + 1), $Variants[$Index].memoryType, $Variants[$Index].memorySpec)
+    }
+    $CustomChoice = $Variants.Count + 1
+    if ($DetectedReliable) {
+        $DetectedTypeCanBeAdded = -not [string]::IsNullOrWhiteSpace($DetectedType) -and $DetectedMatches.Count -eq 0
+        if ($DetectedTypeCanBeAdded) {
+            $AddVariantChoice = $Variants.Count + 2
+            Write-Host "[$CustomChoice] Użyj wykrytej konfiguracji tylko dla tego komputera"
+            Write-Host "[$AddVariantChoice] Zapisz wykrytą konfigurację jako nowy wariant w JSON"
+            $Choice = Read-MenuChoice -Prompt "Wybierz wariant RAM [1-$AddVariantChoice]" -Minimum 1 -Maximum $AddVariantChoice
+            if ($Choice -eq $AddVariantChoice) {
+                $NewVariantSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+                Set-ModelMemoryVariant -DatabasePath $DatabasePath -ModelEntry $ModelEntry -MemoryType $DetectedType -MemorySpec $NewVariantSpec
+                return $NewVariantSpec
+            }
+        }
+        else {
+            Write-Host "[$CustomChoice] Użyj wykrytej konfiguracji tylko dla tego komputera"
+            $Choice = Read-MenuChoice -Prompt "Wybierz wariant RAM [1-$CustomChoice]" -Minimum 1 -Maximum $CustomChoice
+        }
+        if ($Choice -eq $CustomChoice) {
+            return Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+        }
+    }
+    else {
+        Write-Host "[$CustomChoice] Wpisz konfigurację dla tego komputera"
+        $Choice = Read-MenuChoice -Prompt "Wybierz wariant RAM [1-$CustomChoice]" -Minimum 1 -Maximum $CustomChoice
+        if ($Choice -eq $CustomChoice) {
+            return Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $null
+        }
+    }
+
+    $SelectedVariant = $Variants[$Choice - 1]
+    if ($DetectedReliable -and $DetectedType -ieq ([string]$SelectedVariant.memoryType).Trim()) {
+        return Get-DetectedMemorySpecForVariant -DetectedBaseSpec $DetectedBaseSpec -VariantSpec ([string]$SelectedVariant.memorySpec)
+    }
+    return ([string]$SelectedVariant.memorySpec).Trim()
+}
+
 function Set-ModelMemorySpec {
     param(
         [Parameter(Mandatory)][string]$DatabasePath,
@@ -2846,6 +3052,69 @@ function Set-ModelMemorySpec {
     Write-Host "Zaktualizowano memorySpec dla modelu '$Model' w hardware-models.json." -ForegroundColor Green
 }
 
+function Set-ModelMemoryVariant {
+    param(
+        [Parameter(Mandatory)][string]$DatabasePath,
+        [Parameter(Mandatory)][psobject]$ModelEntry,
+        [Parameter(Mandatory)][string]$MemoryType,
+        [Parameter(Mandatory)][string]$MemorySpec
+    )
+
+    $NormalizedType = $MemoryType.Trim().ToUpperInvariant()
+    if ([string]::IsNullOrWhiteSpace($NormalizedType) -or
+        (Get-MemoryTypeFromSpec -Value $MemorySpec) -ne $NormalizedType -or
+        -not (Test-MemorySpecIsComplete -Value $MemorySpec)) {
+        throw "Nie można dodać nieprawidłowego wariantu pamięci '$MemoryType'."
+    }
+
+    $Models = @(Import-ModelDatabase -Path $DatabasePath)
+    $Matches = @($Models | Where-Object { ([string]$_.model).Trim() -ieq ([string]$ModelEntry.model).Trim() })
+    if ($Matches.Count -ne 1) {
+        throw "Nie można dodać wariantu RAM: model '$($ModelEntry.model)' nie występuje w bazie dokładnie jeden raz."
+    }
+
+    $Target = $Matches[0]
+    $Variants = @()
+    if ($null -ne $Target.PSObject.Properties['memoryVariants']) {
+        $Variants = @($Target.memoryVariants)
+    }
+    else {
+        $ExistingType = Get-MemoryTypeFromSpec -Value ([string]$Target.memorySpec)
+        if ([string]::IsNullOrWhiteSpace($ExistingType) -or
+            -not (Test-MemorySpecIsComplete -Value ([string]$Target.memorySpec))) {
+            throw "Nie można zachować dotychczasowej konfiguracji pamięci modelu '$($Target.model)' jako wariantu."
+        }
+        $Variants += [pscustomobject][ordered]@{
+            memoryType = $ExistingType
+            memorySpec = ([string]$Target.memorySpec).Trim()
+        }
+    }
+
+    if (@($Variants | Where-Object { ([string]$_.memoryType).Trim() -ieq $NormalizedType }).Count -gt 0) {
+        throw "Model '$($Target.model)' ma już wariant RAM $NormalizedType."
+    }
+
+    $Variants += [pscustomobject][ordered]@{
+        memoryType = $NormalizedType
+        memorySpec = $MemorySpec.Trim()
+    }
+    if ($null -eq $Target.PSObject.Properties['memoryVariants']) {
+        $Target | Add-Member -NotePropertyName memoryVariants -NotePropertyValue $Variants
+    }
+    else {
+        $Target.memoryVariants = $Variants
+    }
+    Write-ModelDatabase -Path $DatabasePath -Models $Models
+
+    if ($null -eq $ModelEntry.PSObject.Properties['memoryVariants']) {
+        $ModelEntry | Add-Member -NotePropertyName memoryVariants -NotePropertyValue $Variants
+    }
+    else {
+        $ModelEntry.memoryVariants = $Variants
+    }
+    Write-Host "Dodano wariant RAM $NormalizedType do modelu '$($Target.model)' w hardware-models.json." -ForegroundColor Green
+}
+
 function Resolve-MemorySpec {
     param(
         [Parameter(Mandatory)][psobject]$ModelEntry,
@@ -2856,6 +3125,10 @@ function Resolve-MemorySpec {
     $DatabaseSpec = ([string]$ModelEntry.memorySpec).Trim()
     $DetectedBaseSpec = ([string]$MemoryInventory.DetectedSpec).Trim()
     $DetectedReliable = [bool]$MemoryInventory.SpecReliable -and -not [string]::IsNullOrWhiteSpace($DetectedBaseSpec)
+
+    if ($null -ne $ModelEntry.PSObject.Properties['memoryVariants'] -and @($ModelEntry.memoryVariants).Count -gt 0) {
+        return Resolve-MemoryVariantSpec -ModelEntry $ModelEntry -MemoryInventory $MemoryInventory -DatabasePath $DatabasePath
+    }
 
     if (-not (Test-MemorySpecIsComplete -Value $DatabaseSpec)) {
         Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
@@ -2892,6 +3165,32 @@ function Resolve-MemorySpec {
     if ($DetectedReliable -and
         (Get-NormalizedMemorySpec -Value $DetectedSpec) -eq (Get-NormalizedMemorySpec -Value $DatabaseSpec)) {
         return $DetectedSpec
+    }
+
+    $DatabaseType = Get-MemoryTypeFromSpec -Value $DatabaseSpec
+    $DetectedType = if ($DetectedReliable) { Get-MemoryTypeFromSpec -Value $DetectedBaseSpec } else { '' }
+    if ($DetectedReliable -and
+        -not [string]::IsNullOrWhiteSpace($DatabaseType) -and
+        -not [string]::IsNullOrWhiteSpace($DetectedType) -and
+        $DatabaseType -ine $DetectedType) {
+        Write-Section -Title 'Wariant pamięci RAM'
+        Write-Host "Wykryta konfiguracja: $DetectedBaseSpec" -ForegroundColor Green
+        Write-Host "Dotychczasowa wartość w JSON: $DatabaseSpec"
+        Write-Host '[1] Zapisz wykrytą konfigurację jako nowy wariant, zachowując obecną wartość'
+        Write-Host '[2] Użyj wykrytej konfiguracji tylko dla tego komputera'
+        Write-Host '[3] Użyj wartości zapisanej w JSON'
+        Write-Host '[4] Wpisz własną wartość'
+        $Choice = Read-MenuChoice -Prompt 'Wybierz operację [1-4]' -Minimum 1 -Maximum 4
+        switch ($Choice) {
+            1 {
+                $NewVariantSpec = Read-CompleteMemorySpec -Model ([string]$ModelEntry.model) -DetectedSpec $DetectedBaseSpec
+                Set-ModelMemoryVariant -DatabasePath $DatabasePath -ModelEntry $ModelEntry -MemoryType $DetectedType -MemorySpec $NewVariantSpec
+                return $NewVariantSpec
+            }
+            2 { return $DetectedSpec }
+            3 { return $DatabaseSpec }
+            4 { $CustomSpec = Read-TextValue -Prompt 'Wpisz konfigurację pamięci dla pola mainb' -Default $DetectedSpec }
+        }
     }
 
     Write-Section -Title 'Konfiguracja pamięci w płycie głównej'
@@ -3248,10 +3547,18 @@ function Read-HardwarePart {
         $SerialDefault = [string]$Current.Sn
     }
 
-    $Type = Read-TextValue -Prompt 'Typ podzespołu' -Default $TypeDefault
-    $Description = Read-TextValue -Prompt 'Opis' -Default $DescriptionDefault
-    $Connection = Read-TextValue -Prompt 'Połączenie (opcjonalnie)' -Default $ConnectionDefault -AllowEmpty
-    $Serial = Read-TextValue -Prompt 'SN/MAC (opcjonalnie)' -Default $SerialDefault -AllowEmpty
+    if ($null -ne $Current) {
+        $Type = Read-EditableTextValue -Prompt 'Typ podzespołu' -Default $TypeDefault
+        $Description = Read-EditableTextValue -Prompt 'Opis' -Default $DescriptionDefault
+        $Connection = Read-EditableTextValue -Prompt 'Połączenie (opcjonalnie)' -Default $ConnectionDefault -AllowEmpty
+        $Serial = Read-EditableTextValue -Prompt 'SN/MAC (opcjonalnie)' -Default $SerialDefault -AllowEmpty
+    }
+    else {
+        $Type = Read-TextValue -Prompt 'Typ podzespołu' -Default $TypeDefault
+        $Description = Read-TextValue -Prompt 'Opis' -Default $DescriptionDefault
+        $Connection = Read-TextValue -Prompt 'Połączenie (opcjonalnie)' -Default $ConnectionDefault -AllowEmpty
+        $Serial = Read-TextValue -Prompt 'SN/MAC (opcjonalnie)' -Default $SerialDefault -AllowEmpty
+    }
     return New-HardwarePart -Type $Type -Description $Description -Connection $Connection -SerialNumber $Serial
 }
 

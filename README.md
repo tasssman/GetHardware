@@ -85,7 +85,24 @@ W pliku zbiorczym rekordy są otoczone komentarzami `GET-HARDWARE-BEGIN` i `GET-
 
 Wszystkie pola są wymagane, a nazwa modelu musi być unikalna. `baseboardFallback` jest proponowany użytkownikowi tylko wtedy, gdy `Win32_BaseBoard` nie zwróci modelu płyty. `memorySpec` jest dołączany do wykrytej lub zatwierdzonej płyty w nawiasie.
 
-Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy użytkownik może użyć wartości wykrytej, zachować wartość z bazy albo wpisać własną. Aktualizacja `memorySpec` w JSON-ie następuje tylko po jednoznacznym wyborze użytkownika i jest wykonywana przez zweryfikowany plik tymczasowy.
+Jeżeli ten sam model występuje z różnymi generacjami pamięci, pozostaw jeden wpis modelu i dodaj opcjonalne `memoryVariants`. Poniższy fragment należy umieścić wewnątrz obiektu modelu. Dotychczasowe wymagane pole `memorySpec` pozostaje w obiekcie, ale gdy istnieje `memoryVariants`, konfiguracja pamięci jest wybierana z tej listy. `memoryType` musi odpowiadać typowi w `memorySpec`; każda konfiguracja musi zawierać zweryfikowane maksimum lub oznaczenie `soldered`.
+
+```json
+"memoryVariants": [
+  {
+    "memoryType": "DDR4",
+    "memorySpec": "DDR4 3200MHz x2, max64GB"
+  },
+  {
+    "memoryType": "DDR5",
+    "memorySpec": "DDR5 4800MHz x2, max64GB"
+  }
+]
+```
+
+Jeśli wykryty typ RAM-u pasuje dokładnie do jednego wariantu, skrypt wybiera go automatycznie. Przy braku pewnego dopasowania pokazuje warianty do wyboru. Gdy wykryje nową generację, użytkownik może dopisać ją do `memoryVariants`; dotychczasowy `memorySpec` pozostaje wtedy zachowany jako pierwszy wariant. Skrypt prosi o pełną konfigurację z potwierdzonym limitem pojemności albo oznaczeniem `soldered`. Można też użyć konfiguracji tylko dla bieżącego komputera, bez zmiany wspólnego JSON-u.
+
+Skrypt automatycznie buduje propozycję `memorySpec` z danych SMBIOS. Jeżeli jest ona zgodna z JSON-em, nie zadaje dodatkowych pytań. Przy różnicy generacji użytkownik może zapisać wykrytą konfigurację jako nowy wariant, zachować wartość z bazy, użyć jej tylko dla bieżącego komputera albo wpisać własną. Nowy wariant trafia do JSON-u tylko po jednoznacznym wyborze użytkownika i jest zapisywany przez zweryfikowany plik tymczasowy.
 
 Odczyt zainstalowanych modułów RAM jest niezależny od ustalania konfiguracji pamięci obsługiwanej przez płytę główną. Jeśli moduły zostały wykryte, ale nie udało się ustalić np. liczby gniazd dla `memorySpec`, skrypt wyraźnie informuje, że problem dotyczy tylko opisu pola `mainb`. Dopiero brak wpisów zainstalowanej pamięci powoduje ostrzeżenie o konieczności ręcznego dodania RAM-u w edytorze podzespołów.
 

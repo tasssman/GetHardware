@@ -547,5 +547,41 @@
         "powerW":  40,
         "other":  "zasilacz USB-C",
         "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5550",
+        "baseboardFallback":  "Latitude 5550",
+        "memorySpec":  "DDR5 5600MHz x2, max64GB",
+        "powerMaxW":  65,
+        "powerW":  45,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Latitude 5540",
+        "baseboardFallback":  "Latitude 5540",
+        "memorySpec":  "DDR4 3200MHz x2, max64GB",
+        "powerMaxW":  65,
+        "powerW":  40,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 3480",
+        "baseboardFallback":  "Precision 3480",
+        "memorySpec":  "DDR5 4800MHz x2, max64GB",
+        "powerMaxW":  130,
+        "powerW":  90,
+        "other":  "",
+        "deviceType":  "laptop"
+    },
+    {
+        "model":  "Precision 3580",
+        "baseboardFallback":  "Precision 3580",
+        "memorySpec":  "DDR5 4800MHz x2, max64GB",
+        "powerMaxW":  130,
+        "powerW":  90,
+        "other":  "",
+        "deviceType":  "laptop"
     }
 ]

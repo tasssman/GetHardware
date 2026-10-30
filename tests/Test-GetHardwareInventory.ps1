@@ -495,13 +495,55 @@ Assert-True -Condition ($DetectedMainboard -eq "Dell Inc. 0FFCXR A00 ($($TestMod
 $script:MockReadHostValue = ''
 $script:MockReadHostQueue = New-Object System.Collections.Generic.Queue[string]
 $script:MockReadHostPrompts = New-Object System.Collections.Generic.List[string]
+$script:MockReadHostStrict = $false
+$script:MockReadHostRepeatedEmptyPrompt = 0
+$script:MockReadHostLastPrompt = ''
 function Read-Host {
     param([string]$Prompt)
     $script:MockReadHostPrompts.Add([string]$Prompt)
+    $Value = $script:MockReadHostValue
     if ($script:MockReadHostQueue.Count -gt 0) {
-        return $script:MockReadHostQueue.Dequeue()
+        $Value = $script:MockReadHostQueue.Dequeue()
     }
-    return $script:MockReadHostValue
+    if ([string]::IsNullOrEmpty($Value) -and $Prompt -eq $script:MockReadHostLastPrompt) {
+        $script:MockReadHostRepeatedEmptyPrompt++
+    }
+    elseif ([string]::IsNullOrEmpty($Value)) {
+        $script:MockReadHostRepeatedEmptyPrompt = 1
+    }
+    else {
+        $script:MockReadHostRepeatedEmptyPrompt = 0
+    }
+    $script:MockReadHostLastPrompt = [string]$Prompt
+    if (($script:MockReadHostStrict -and [string]::IsNullOrEmpty($Value)) -or $script:MockReadHostRepeatedEmptyPrompt -ge 3) {
+        throw "No mocked input remains for prompt '$Prompt'."
+    }
+    return $Value
+}
+
+$OriginalEditableTextReader = (Get-Item Function:\Read-EditableTextValue).ScriptBlock
+$script:MockEditableTextQueue = New-Object System.Collections.Generic.Queue[string]
+$script:MockEditableTextDefaults = New-Object System.Collections.Generic.List[object]
+$script:MockEditableTextQueue.Enqueue('RAM Module')
+$script:MockEditableTextQueue.Enqueue('32GB DDR4')
+$script:MockEditableTextQueue.Enqueue('SODIMM')
+$script:MockEditableTextQueue.Enqueue('NEW123')
+Set-Item -Path Function:\Read-EditableTextValue -Value {
+    param([string]$Prompt, [AllowNull()][string]$Default, [switch]$AllowEmpty)
+    $script:MockEditableTextDefaults.Add([pscustomobject]@{ Prompt = $Prompt; Default = $Default; AllowEmpty = [bool]$AllowEmpty })
+    return $script:MockEditableTextQueue.Dequeue()
+}
+try {
+    $OriginalHardwarePart = New-HardwarePart -Type 'RAM' -Description '16GB DDR4' -Connection 'SO-DIMM' -SerialNumber 'OLD123'
+    $EditedHardwarePart = Read-HardwarePart -Current $OriginalHardwarePart
+    Assert-True -Condition ($EditedHardwarePart.Pt -eq 'RAM Module') -Message 'Editing a hardware part should accept the replacement type.'
+    Assert-True -Condition ($EditedHardwarePart.Desc -eq '32GB DDR4') -Message 'Editing a hardware part should accept the replacement description.'
+    Assert-True -Condition ($EditedHardwarePart.Conn -eq 'SODIMM') -Message 'Editing a hardware part should accept the replacement connection.'
+    Assert-True -Condition ($EditedHardwarePart.Sn -eq 'NEW123') -Message 'Editing a hardware part should accept the replacement serial number.'
+    Assert-True -Condition ((($script:MockEditableTextDefaults | ForEach-Object Default) -join '|') -eq 'RAM|16GB DDR4|SO-DIMM|OLD123') -Message 'The existing type, description, connection, and serial number should prefill their edit fields.'
+}
+finally {
+    Set-Item -Path Function:\Read-EditableTextValue -Value $OriginalEditableTextReader
 }
 
 $script:MockReadHostQueue.Enqueue('1')
@@ -595,6 +637,93 @@ $ResolvedLenovoMemorySpec = Resolve-MemorySpec `
     -MemoryInventory $LenovoSolderedMemory `
     -DatabasePath (Join-Path $ProjectRoot 'hardware-models.json')
 Assert-True -Condition ($ResolvedLenovoMemorySpec -eq 'LPDDR5 8533MHz soldered') -Message 'Detected soldered LPDDR5 should not inherit an unrelated max...GB value from JSON.'
+
+$script:MockReadHostStrict = $true
+$Precision3480ModelEntry = [pscustomobject]@{
+    model = 'Precision 3480'
+    baseboardFallback = 'Precision 3480'
+    memorySpec = 'DDR4 3200MHz x2, max64GB'
+    memoryVariants = @(
+        [pscustomobject]@{ memoryType = 'DDR4'; memorySpec = 'DDR4 3200MHz x2, max64GB' }
+        [pscustomobject]@{ memoryType = 'DDR5'; memorySpec = 'DDR5 4800MHz x2, max64GB' }
+    )
+    powerMaxW = 130
+    powerW = 65
+    other = ''
+    deviceType = 'laptop'
+}
+$MemoryVariantTestRoot = Join-Path $PSScriptRoot ('.memory-variants-' + [guid]::NewGuid().ToString('N'))
+$MemoryVariantTestDatabase = Join-Path $MemoryVariantTestRoot 'hardware-models.json'
+New-Item -ItemType Directory -Path $MemoryVariantTestRoot -Force | Out-Null
+try {
+    $InitialPrecision3480Entry = $Precision3480ModelEntry.PSObject.Copy()
+    $InitialPrecision3480Entry.PSObject.Properties.Remove('memoryVariants')
+    $InitialJson = ConvertTo-Json -InputObject @($InitialPrecision3480Entry) -Depth 8
+    [IO.File]::WriteAllText($MemoryVariantTestDatabase, $InitialJson, (New-Object System.Text.UTF8Encoding($false)))
+    Write-ModelDatabase -Path $MemoryVariantTestDatabase -Models @($Precision3480ModelEntry)
+    $ImportedPrecision3480 = @(Import-ModelDatabase -Path $MemoryVariantTestDatabase)
+    Assert-True -Condition (@($ImportedPrecision3480[0].memoryVariants).Count -eq 2) -Message 'A model should support multiple RAM generations in one unique JSON entry.'
+    $VariantDatabaseContentBeforeSelections = [IO.File]::ReadAllText($MemoryVariantTestDatabase)
+
+    $Ddr4VariantMemory = [pscustomobject]@{ DetectedSpec = 'DDR4 3200MHz x2'; SpecReliable = $true }
+    $Ddr4VariantSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $Ddr4VariantMemory -DatabasePath $MemoryVariantTestDatabase
+    Assert-True -Condition ($Ddr4VariantSpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'Reliable DDR4 detection should select the DDR4 model variant automatically.'
+
+    $Ddr5VariantMemory = [pscustomobject]@{ DetectedSpec = 'DDR5 4800MHz x2'; SpecReliable = $true }
+    $Ddr5VariantSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $Ddr5VariantMemory -DatabasePath $MemoryVariantTestDatabase
+    Assert-True -Condition ($Ddr5VariantSpec -eq 'DDR5 4800MHz x2, max64GB') -Message 'Reliable DDR5 detection should select the DDR5 model variant automatically.'
+
+    $script:MockReadHostQueue.Enqueue('2')
+    $UnreliableVariantMemory = [pscustomobject]@{ DetectedSpec = ''; SpecReliable = $false }
+    $ChosenVariantSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $UnreliableVariantMemory -DatabasePath $MemoryVariantTestDatabase
+    Assert-True -Condition ($ChosenVariantSpec -eq 'DDR5 4800MHz x2, max64GB') -Message 'When RAM generation is unknown, the user should be able to select a stored model variant.'
+
+    $script:MockReadHostQueue.Enqueue('3')
+    $script:MockReadHostQueue.Enqueue('DDR3 1600MHz x2, max32GB')
+    $UnknownGenerationMemory = [pscustomobject]@{ DetectedSpec = 'DDR3 1600MHz x2'; SpecReliable = $true }
+    $CurrentComputerSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $UnknownGenerationMemory -DatabasePath $MemoryVariantTestDatabase
+    Assert-True -Condition ($CurrentComputerSpec -eq 'DDR3 1600MHz x2, max32GB') -Message 'An unlisted detected generation should be usable for this computer without changing the shared database.'
+    Assert-True -Condition ([IO.File]::ReadAllText($MemoryVariantTestDatabase) -eq $VariantDatabaseContentBeforeSelections) -Message 'Selecting model memory variants should not modify the shared model database.'
+
+    $script:MockReadHostQueue.Enqueue('4')
+    $script:MockReadHostQueue.Enqueue('DDR3 1600MHz x2, max32GB')
+    $AddedVariantSpec = Resolve-MemorySpec -ModelEntry $ImportedPrecision3480[0] -MemoryInventory $UnknownGenerationMemory -DatabasePath $MemoryVariantTestDatabase
+    $ModelsAfterVariantAdd = @(Import-ModelDatabase -Path $MemoryVariantTestDatabase)
+    $Precision3480AfterVariantAdd = $ModelsAfterVariantAdd[0]
+    Assert-True -Condition ($AddedVariantSpec -eq 'DDR3 1600MHz x2, max32GB') -Message 'Choosing to save an unlisted detected generation should use the complete new variant.'
+    Assert-True -Condition ($Precision3480AfterVariantAdd.memorySpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'Adding a RAM variant should preserve the original top-level memorySpec.'
+    Assert-True -Condition (@($Precision3480AfterVariantAdd.memoryVariants).Count -eq 3) -Message 'Saving an unlisted RAM generation should append one variant to an existing variant list.'
+    Assert-True -Condition (@($Precision3480AfterVariantAdd.memoryVariants | Where-Object memoryType -EQ 'DDR3').Count -eq 1) -Message 'The new RAM generation should be stored exactly once.'
+
+    $LegacyVariantDatabase = Join-Path $MemoryVariantTestRoot 'hardware-models-legacy.json'
+    [IO.File]::WriteAllText($LegacyVariantDatabase, $InitialJson, (New-Object System.Text.UTF8Encoding($false)))
+    $LegacyModelEntry = @(Import-ModelDatabase -Path $LegacyVariantDatabase)[0]
+    $script:MockReadHostQueue.Enqueue('1')
+    $script:MockReadHostQueue.Enqueue('DDR5 4800MHz x2, max64GB')
+    $LegacyAddedVariantSpec = Resolve-MemorySpec -ModelEntry $LegacyModelEntry -MemoryInventory $Ddr5VariantMemory -DatabasePath $LegacyVariantDatabase
+    $LegacyModelAfterAdd = @(Import-ModelDatabase -Path $LegacyVariantDatabase)[0]
+    Assert-True -Condition ($LegacyAddedVariantSpec -eq 'DDR5 4800MHz x2, max64GB') -Message 'A legacy model without memoryVariants should allow saving a detected different generation.'
+    Assert-True -Condition ($LegacyModelAfterAdd.memorySpec -eq 'DDR4 3200MHz x2, max64GB') -Message 'Converting a legacy entry to memoryVariants should leave its original memorySpec unchanged.'
+    Assert-True -Condition (@($LegacyModelAfterAdd.memoryVariants).Count -eq 2) -Message 'Saving a second generation should retain the original config and append the detected config.'
+
+    $InvalidPrecision3480Entry = $Precision3480ModelEntry.PSObject.Copy()
+    $InvalidPrecision3480Entry.memoryVariants = @(
+        [pscustomobject]@{ memoryType = 'DDR4'; memorySpec = 'DDR4 3200MHz x2, max64GB' }
+        [pscustomobject]@{ memoryType = 'DDR4'; memorySpec = 'DDR4 2666MHz x2, max64GB' }
+    )
+    $InvalidJson = ConvertTo-Json -InputObject @($InvalidPrecision3480Entry) -Depth 8
+    [IO.File]::WriteAllText($MemoryVariantTestDatabase, $InvalidJson, (New-Object System.Text.UTF8Encoding($false)))
+    $DuplicateVariantRejected = $false
+    try { $null = Import-ModelDatabase -Path $MemoryVariantTestDatabase }
+    catch { $DuplicateVariantRejected = $true }
+    Assert-True -Condition $DuplicateVariantRejected -Message 'A model JSON entry should reject duplicate memoryType variants.'
+}
+finally {
+    if (Test-Path -LiteralPath $MemoryVariantTestRoot -PathType Container) {
+        Remove-Item -LiteralPath $MemoryVariantTestRoot -Recurse -Force
+    }
+    $script:MockReadHostStrict = $false
+}
 
 $script:MockDiskFormFactorName = 'Unknown'
 $UnknownFormatDiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
@@ -753,6 +882,7 @@ try {
     $TestModelsBeforeMemoryUpdate = @(Import-ModelDatabase -Path $TestModelDatabase)
     $TestModelBeforeMemoryUpdate = $TestModelsBeforeMemoryUpdate | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
     $script:MockReadHostQueue.Enqueue('1')
+    $script:MockReadHostQueue.Enqueue('DDR4 3200MHz x4, max8GB')
     $ResolvedMemorySpec = Resolve-MemorySpec `
         -ModelEntry $TestModelBeforeMemoryUpdate `
         -MemoryInventory $SlotMemory `
@@ -760,7 +890,9 @@ try {
     Assert-True -Condition ($ResolvedMemorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'The detected type, speed, and slots should retain the manually verified maximum from JSON.'
     $UpdatedModels = @(Import-ModelDatabase -Path $TestModelDatabase)
     $UpdatedModel = $UpdatedModels | Where-Object model -EQ 'Latitude 7420' | Select-Object -First 1
-    Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR4 3200MHz x4, max8GB') -Message 'Updating memorySpec should never replace the verified maximum with SMBIOS MaxCapacityEx.'
+    Assert-True -Condition ($UpdatedModel.memorySpec -eq 'DDR3L 1600MHz x2, max8GB') -Message 'Adding a different RAM generation should preserve the original memorySpec.'
+    Assert-True -Condition (@($UpdatedModel.memoryVariants).Count -eq 2) -Message 'A detected different RAM generation should be added as a second variant.'
+    Assert-True -Condition (@($UpdatedModel.memoryVariants | Where-Object memoryType -EQ 'DDR4').Count -eq 1) -Message 'The detected RAM generation should appear exactly once in memoryVariants.'
     Assert-True -Condition ($UpdatedModels.Count -eq $Models.Count) -Message 'Updating memorySpec should preserve every model in JSON.'
 
     $script:MockReadHostQueue.Enqueue('Latitude 7420 fallback test')
