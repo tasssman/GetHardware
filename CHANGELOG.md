@@ -1,3 +1,8 @@
+# Zmiany w wersji v1.0.6
+
+- Pomijanie automatycznie wykrytych numerów seryjnych dysków i RAM-u jako niewiarygodnych, również dla dysków USB i wykrywania awaryjnego.
+- Podgląd dysku USB bez numeru seryjnego; możliwość ręcznego wpisania numeru w edytorze podzespołów pozostaje bez zmian.
+
 # Zmiany w wersji v1.0.5
 
 - Ujednolicenie numerowanych menu w konsoli przez wspólny helper, aby skrócić kod i poprawić czytelność interakcji.

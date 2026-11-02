@@ -4,8 +4,8 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $ProjectRoot 'Get-HardwareInventory.ps1')
 
-if ($ScriptVersion -ne 'v1.0.5') {
-    throw 'Assertion failed: The script version should be v1.0.5.'
+if ($ScriptVersion -ne 'v1.0.6') {
+    throw 'Assertion failed: The script version should be v1.0.6.'
 }
 
 function Assert-True {
@@ -349,7 +349,7 @@ $SlotMemory = ConvertTo-MemoryInventory `
 Assert-True -Condition ($SlotMemory.Parts.Count -eq 2) -Message 'Replaceable RAM modules should remain separate PHP parts.'
 Assert-True -Condition ($SlotMemory.Parts[0].Desc -eq '16GB 3200MHz DDR4') -Message 'RAM parts should use rated Speed instead of ConfiguredClockSpeed.'
 Assert-True -Condition ($SlotMemory.Parts[0].Conn -eq 'on board') -Message 'Replaceable RAM should use the agreed on board connection.'
-Assert-True -Condition ($SlotMemory.Parts[0].Sn -eq '16596967') -Message 'A valid RAM serial number should be preserved.'
+Assert-True -Condition (@($SlotMemory.Parts | Where-Object Sn -NE '').Count -eq 0) -Message 'All detected RAM serial numbers should be ignored, even when they look valid.'
 Assert-True -Condition ($SlotMemory.DetectedSpec -eq 'DDR4 3200MHz x4') -Message 'Detected memorySpec should contain type, speed, and slot count without trusting SMBIOS maximum capacity.'
 Assert-True -Condition ($SlotMemory.ReportedMaximumCapacityGb -eq 128) -Message 'The SMBIOS maximum should remain available only as diagnostic data.'
 Assert-True -Condition (Test-InstalledMemoryDetected -MemoryInventory $SlotMemory) -Message 'Detected RAM parts should be distinguished from motherboard memorySpec detection.'
@@ -434,7 +434,7 @@ Assert-True -Condition ($TouchDisplayParts[0].Desc -eq '14" 1920x1080 touch') -M
 $DiskPart = New-PhysicalDiskPart -Disk (Get-PhysicalDisk)
 Assert-True -Condition ($DiskPart.Desc -eq '512GB NVMe SSD EG6 KIOXIA') -Message 'The disk description should contain decimal capacity, bus, media type, and a deduplicated model.'
 Assert-True -Condition ($DiskPart.Conn -eq 'M.2') -Message 'A native M.2 form factor should be accepted without an interactive fallback.'
-Assert-True -Condition ($DiskPart.Sn -eq '8CE38E040558F5B4') -Message 'The grouped NVMe serial number should be normalized.'
+Assert-True -Condition ($DiskPart.Sn -eq '') -Message 'Detected disk serial numbers and UniqueId should be ignored.'
 Assert-True -Condition ($DiskPart.DiskHealthStatus -eq 'Healthy') -Message 'The disk diagnostic data should preserve HealthStatus.'
 Assert-True -Condition ($DiskPart.DiskPowerOnHours -eq 2400) -Message 'The disk diagnostic data should preserve NVMe power-on hours.'
 Assert-True -Condition ($DiskPart.DiskBytesRead -eq 1024000000000) -Message 'NVMe data units read should be converted to bytes.'
@@ -808,7 +808,13 @@ Assert-True -Condition ($AcceptedUsbDiskParts.Count -eq 2) -Message 'A USB disk 
 $AcceptedUsbPart = $AcceptedUsbDiskParts | Where-Object Desc -Like '*Portable*'
 Assert-True -Condition ($null -ne $AcceptedUsbPart) -Message 'The confirmed USB disk should be present in the hardware list.'
 Assert-True -Condition ($AcceptedUsbPart.Conn -eq 'USB') -Message 'A confirmed USB disk should use USB as its connection.'
+Assert-True -Condition ($AcceptedUsbPart.Sn -eq '') -Message 'A confirmed USB disk should not contain a detected serial number.'
 Assert-True -Condition ($script:MockReadHostQueue.Count -eq 0) -Message 'The detected USB disk should consume a user confirmation response.'
+
+$script:MockReadHostQueue.Enqueue('T')
+$UsbPreview = @(Confirm-UsbDiskInventoryPart -DiskPart $AcceptedUsbPart 6>&1)
+Assert-True -Condition (($UsbPreview -join "`n") -notmatch 'Numer seryjny') -Message 'The USB disk preview should not display a serial-number field.'
+Assert-True -Condition ($UsbPreview[-1] -eq $true) -Message 'Hiding the serial number should preserve USB disk confirmation.'
 
 $script:MockPhysicalDiskList = @($MockUsbDisk)
 $script:MockReadHostPrompts.Clear()
@@ -832,6 +838,19 @@ $script:MockReadHostQueue.Enqueue('N')
 $FallbackUsbDiskParts = @(Get-DiskInventoryParts)
 Assert-True -Condition ($FallbackUsbDiskParts.Count -eq 0) -Message 'A USB disk detected through Win32_DiskDrive should be omitted after rejection.'
 Assert-True -Condition ($script:MockReadHostQueue.Count -eq 0) -Message 'A USB disk from the Win32_DiskDrive fallback should consume a user confirmation response.'
+$script:MockReadHostQueue.Enqueue('T')
+$AcceptedFallbackUsbDiskParts = @(Get-DiskInventoryParts)
+Assert-True -Condition ($AcceptedFallbackUsbDiskParts.Count -eq 1) -Message 'A fallback USB disk should still be added after confirmation.'
+Assert-True -Condition ($AcceptedFallbackUsbDiskParts[0].Sn -eq '') -Message 'A fallback USB disk should not contain a detected serial number.'
+$script:MockReadHostQueue.Enqueue('SATA')
+$FallbackInternalDiskPart = New-Win32DiskPart -Disk ([pscustomobject]@{
+    Size = 512000000000
+    Model = 'Internal SATA SSD'
+    SerialNumber = 'INTERNAL-123'
+    InterfaceType = 'SATA'
+    PNPDeviceID = 'SCSI\DISK'
+})
+Assert-True -Condition ($FallbackInternalDiskPart.Sn -eq '') -Message 'An internal fallback disk should not contain a detected serial number.'
 $script:MockPhysicalDiskFailure = $false
 $script:MockPhysicalDiskList = $null
 $script:MockWin32DiskDriveList = $null
@@ -869,6 +888,9 @@ Assert-True -Condition ($Body.Contains("addComp('13QJ7D3_laptop',`$C,`$partsLapt
 Assert-True -Condition ($Body.Contains("Intel test\'s CPU")) -Message 'Apostrophes should be escaped for PHP.'
 Assert-True -Condition ($Body.Contains(",'mhz'=>3000")) -Message 'The resolved processor frequency should be written to mhz.'
 Assert-True -Condition ($Body.Contains("'sn'=>'D03C1FD5C7D0'")) -Message 'Optional component serial numbers should be rendered.'
+$DetectedPartsBody = New-PhpRecordBody -Inventory $Inventory -Parts @($DiskPart, $SlotMemory.Parts[0])
+Assert-True -Condition ($DetectedPartsBody.Contains("array('pt'=>'Hard Disk', 'desc'=>'512GB NVMe SSD EG6 KIOXIA', 'conn'=>'M.2');")) -Message 'A detected disk should be exported without a serial number.'
+Assert-True -Condition ($DetectedPartsBody.Contains("array('pt'=>'RAM', 'desc'=>'16GB 3200MHz DDR4', 'conn'=>'on board');")) -Message 'Detected RAM should be exported without a serial number.'
 Assert-True -Condition ($Body.Contains("array('pt'=>'Battery', 'desc'=>'Internal Battery', 'conn'=>'on board', 'sn'=>'');")) -Message 'A battery should use on board and always contain an explicitly empty sn field.'
 Assert-True -Condition ($Body.Contains('#https://www.dell.com/support/home/en-us/product-support/servicetag/13QJ7D3/overview')) -Message 'A Dell PHP record should contain its support URL.'
 $NonDellInventory = $Inventory.PSObject.Copy()

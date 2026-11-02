@@ -127,17 +127,16 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Pokazywać ostrzeżenie dotyczące konkretnego lokalizatora lub banku.
 
 - [x] Ustalić zakres danych RAM używanych w PHP.
-  - Używać `Capacity`, `Speed`, `SMBIOSMemoryType`, `DeviceLocator`, `BankLabel`, `FormFactor` i poprawnego `SerialNumber`.
+  - Używać `Capacity`, `Speed`, `SMBIOSMemoryType`, `DeviceLocator`, `BankLabel` i `FormFactor`.
   - `Speed` jest wartością podstawową, a `ConfiguredClockSpeed` wyłącznie wartością awaryjną.
   - Nie dodawać do PHP identyfikatora producenta JEDEC, numeru części, napięć ani pozostałych danych diagnostycznych.
 
-- [x] Filtrować niewiarygodne dane identyfikacyjne RAM.
-  - Usuwać spacje z początku i końca producenta, numeru części i numeru seryjnego.
-  - Traktować wartości puste, `00000000`, `FFFFFFFF` i typowe teksty zastępcze jako brak danych.
+- [x] Pomijać automatycznie wykryte numery seryjne RAM jako niewiarygodne.
+  - Pozostawiać puste `sn` dla wszystkich wykrytych modułów; zachować możliwość ręcznego wpisania numeru.
 
 - [x] Ustalić docelowy format opisu RAM w PHP.
   - Używać formatu `16GB 3200MHz DDR4`.
-  - Każdy moduł wymienny zapisywać osobno z `conn'=>'on board'` i poprawnym numerem seryjnym w `sn`.
+  - Każdy moduł wymienny zapisywać osobno z `conn'=>'on board'` i pustym `sn`.
   - Rekordy pamięci lutowanej grupować według typu i szybkości, zapisywać z `conn'=>'soldered'` oraz bez wspólnego numeru seryjnego.
   - Zachować krótki i przewidywalny format wymagany przez istniejący import PHP.
 
@@ -156,7 +155,7 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - Dla NVMe z nieznanym formatem proponować `M.2`, ale nie zapisywać go bez zatwierdzenia.
 
 - [x] Rozszerzyć dane dysku dostępne podczas weryfikacji.
-  - Odczytywać `Manufacturer`, `Model`, `SerialNumber`, `FirmwareVersion`, `BusType`, `MediaType` i `PhysicalLocation`.
+  - Odczytywać `Manufacturer`, `Model`, `FirmwareVersion`, `BusType`, `MediaType` i `PhysicalLocation`.
   - Pokazywać `HealthStatus` oraz `OperationalStatus` diagnostycznie.
   - Jeśli sterownik pozwala, odczytywać temperaturę, zużycie, czas pracy oraz liczniki błędów przez `Get-StorageReliabilityCounter`.
   - Brak liczników niezawodności traktować jako brak danych, a nie błąd całej inwentaryzacji.
@@ -171,14 +170,14 @@ Lista problemów wykrytych podczas przeglądu skryptów. Składnia pliku PowerSh
   - W ostrzeżeniu wskazywać konkretny model albo identyfikator problematycznego urządzenia.
 
 - [x] Filtrować i normalizować identyfikatory dysków.
-  - Usuwać zbędne spacje z modelu, producenta, firmware i numeru seryjnego.
-  - Odrzucać puste numery seryjne i typowe wartości zastępcze.
+  - Usuwać zbędne spacje z modelu, producenta i firmware.
+  - Pomijać automatycznie wykryte numery seryjne jako niewiarygodne.
   - Unikać powtarzania słów takich jak `NVMe` lub nazwy producenta, jeśli występują już w modelu.
 
 - [x] Ustalić docelowy format wpisu dysku w PHP.
   - Zachować typ części `Hard Disk`, jeśli wymaga tego istniejący importer.
   - Do `desc` dodawać pojemność dziesiętną, `BusType`, `MediaType` i oczyszczony model bez powtórzeń.
-  - Poprawny numer seryjny zapisywać w opcjonalnym polu `sn`; normalizować format NVMe z grupami rozdzielonymi znakami `_`.
+  - Dla wykrytych dysków pozostawiać puste `sn`, także dla USB i źródła awaryjnego; zachować możliwość ręcznego wpisania numeru.
   - Gdy `HealthStatus` nie jest `Healthy`, ostrzegać użytkownika; wpis nadal trafia do istniejącego przeglądu podzespołów.
   - Zachować pojemność dziesiętną, np. `256GB`, zgodną z oznaczeniem producenta.
 

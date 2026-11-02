@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $ModelDatabasePath = Join-Path $PSScriptRoot 'hardware-models.json'
 $OutputRoot = Join-Path $PSScriptRoot 'output'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ScriptVersion = 'v1.0.5'
+$ScriptVersion = 'v1.0.6'
 
 function Write-Section {
     param([Parameter(Mandatory)][string]$Title)
@@ -1862,32 +1862,6 @@ function Get-DiskHealthInformation {
     }
 }
 
-function Test-DiskSerialNumber {
-    param([AllowNull()][string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-    return $Value.Trim() -notmatch '^(0+|Unknown|None|N/A|Default string|Not Specified)$'
-}
-
-function Get-NormalizedDiskSerialNumber {
-    param(
-        [AllowNull()][string]$SerialNumber,
-        [AllowNull()][string]$UniqueId
-    )
-
-    $Serial = ([string]$SerialNumber).Trim().TrimEnd('.')
-    if ($Serial -match '^(?:[0-9A-Fa-f]{4}_)+[0-9A-Fa-f]{4}$') {
-        $Serial = $Serial -replace '_', ''
-    }
-    if (Test-DiskSerialNumber -Value $Serial) { return $Serial }
-
-    $Fallback = ([string]$UniqueId).Trim()
-    if ($Fallback -match '^(?i)eui\.(?<serial>[0-9a-f]+)$') {
-        return $Matches['serial'].ToUpperInvariant()
-    }
-    return ''
-}
-
 function Get-NormalizedDiskModel {
     param(
         [AllowNull()][string]$Model,
@@ -1966,10 +1940,6 @@ function New-PhysicalDiskPart {
         -MediaType $MediaType
     $Description = (@("${CapacityGb}GB", $BusType, $MediaType, $Model) |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
-    $Serial = Get-NormalizedDiskSerialNumber `
-        -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
-        -UniqueId ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'UniqueId'))
-
     $DiskNumber = 0
     $DeviceId = [string](Get-OptionalPropertyValue -InputObject $Disk -Name 'DeviceId')
     if (-not [int]::TryParse($DeviceId, [ref]$DiskNumber)) {
@@ -1999,7 +1969,7 @@ function New-PhysicalDiskPart {
     }
 
     $HealthInformation = Get-DiskHealthInformation -Disk $Disk -DiskNumber $DiskNumber -BusType $BusType
-    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection
     $Part | Add-Member -NotePropertyName DiskHealthStatus -NotePropertyValue $HealthInformation.HealthStatus
     $Part | Add-Member -NotePropertyName DiskPowerOnHours -NotePropertyValue $HealthInformation.PowerOnHours
     $Part | Add-Member -NotePropertyName DiskBytesRead -NotePropertyValue $HealthInformation.BytesRead
@@ -2034,10 +2004,7 @@ function New-Win32DiskPart {
             -Prompt 'Połączenie/format dysku (Enter = podpowiedź, lub wpisz własne)' `
             -Default $DefaultConnection
     }
-    $Serial = Get-NormalizedDiskSerialNumber `
-        -SerialNumber ([string](Get-OptionalPropertyValue -InputObject $Disk -Name 'SerialNumber')) `
-        -UniqueId ''
-    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection -SerialNumber $Serial
+    $Part = New-HardwarePart -Type 'Hard Disk' -Description $Description -Connection $Connection
     $Part | Add-Member -NotePropertyName DiskHealthStatus -NotePropertyValue ''
     $Part | Add-Member -NotePropertyName DiskPowerOnHours -NotePropertyValue $null
     $Part | Add-Member -NotePropertyName DiskBytesRead -NotePropertyValue $null
@@ -2053,8 +2020,6 @@ function Confirm-UsbDiskInventoryPart {
     Write-Section -Title 'Wykryto dysk USB'
     Write-Host "Opis:          $($DiskPart.Desc)"
     Write-Host "Połączenie:    $($DiskPart.Conn)"
-    $Serial = if ([string]::IsNullOrWhiteSpace([string]$DiskPart.Sn)) { 'brak danych' } else { $DiskPart.Sn }
-    Write-Host "Numer seryjny: $Serial"
     Show-DiskHealthInformation -Parts @($DiskPart)
     return Read-YesNo -Prompt 'Czy dodać ten dysk USB do listy sprzętu? [T/N]'
 }
@@ -2814,14 +2779,6 @@ function Get-MemoryTypeName {
     }
 }
 
-function Test-MemorySerialNumber {
-    param([AllowNull()][string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-    $Normalized = $Value.Trim()
-    return $Normalized -notmatch '^(0+|F+|Unknown|None|N/A|Default string|Not Specified)$'
-}
-
 function Get-MemoryPlacement {
     param([Parameter(Mandatory)][psobject]$Memory)
 
@@ -2855,19 +2812,11 @@ function ConvertTo-MemoryInventory {
             $RatedSpeed = if ([int]$Memory.Speed -gt 0) { [int]$Memory.Speed } else { [int]$Memory.ConfiguredClockSpeed }
             $MemoryType = Get-MemoryTypeName -SmbiosMemoryType ([int]$Memory.SMBIOSMemoryType)
             $Placement = Get-MemoryPlacement -Memory $Memory
-            $SerialNumber = if (Test-MemorySerialNumber -Value ([string]$Memory.SerialNumber)) {
-                ([string]$Memory.SerialNumber).Trim()
-            }
-            else {
-                ''
-            }
-
             $NormalizedDevices.Add([pscustomobject]@{
                 CapacityGb  = $CapacityGb
                 SpeedMhz    = $RatedSpeed
                 MemoryType  = $MemoryType
                 Placement   = $Placement
-                SerialNumber = $SerialNumber
             })
         }
         catch {
@@ -2898,7 +2847,7 @@ function ConvertTo-MemoryInventory {
         $Description = "$($Memory.CapacityGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture))GB"
         if ($Memory.SpeedMhz -gt 0) { $Description += " $($Memory.SpeedMhz)MHz" }
         if (-not [string]::IsNullOrWhiteSpace($Memory.MemoryType)) { $Description += " $($Memory.MemoryType)" }
-        $Parts.Add((New-HardwarePart -Type 'RAM' -Description $Description -Connection 'on board' -SerialNumber $Memory.SerialNumber))
+        $Parts.Add((New-HardwarePart -Type 'RAM' -Description $Description -Connection 'on board'))
     }
 
     $SystemArrays = @($MemoryArrays | Where-Object { [int]$_.Use -eq 3 -or [int]$_.Location -eq 3 })

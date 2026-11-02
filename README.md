@@ -2,7 +2,7 @@
 
 Interaktywny skrypt Windows PowerShell 5.1 odczytujący informacje o sprzęcie i zapisujący je w plikach PHP przeznaczonych do importu do istniejącej bazy.
 
-Aktualna wersja skryptu: `v1.0.5`. Numer wersji jest wyświetlany jako pierwszy komunikat po uruchomieniu. Nazwa pliku pozostaje stała niezależnie od wersji.
+Aktualna wersja skryptu: `v1.0.6`. Numer wersji jest wyświetlany jako pierwszy komunikat po uruchomieniu. Nazwa pliku pozostaje stała niezależnie od wersji.
 
 ## Wymagania
 
@@ -39,7 +39,9 @@ Skrypt nie przyjmuje nazwy spisu jako parametru. Przy pierwszym uruchomieniu pro
 
 W podsumowaniu pusta notatka jest pokazywana jawnie jako `[pusta]`, aby łatwiej wychwycić brak danych przed zapisem.
 
-Wykryty dysk USB jest pokazywany wraz z opisem, połączeniem, numerem seryjnym i dostępnymi danymi diagnostycznymi. Skrypt pyta, czy dodać go do listy sprzętu; po odmowie pomija tylko ten dysk.
+Wykryty dysk USB jest pokazywany wraz z opisem, połączeniem i dostępnymi danymi diagnostycznymi, bez numeru seryjnego. Skrypt pyta, czy dodać go do listy sprzętu; po odmowie pomija tylko ten dysk.
+
+Numery seryjne dysków i RAM-u nie są przypisywane automatycznie, ponieważ odczyt sprzętowy nie jest wystarczająco wiarygodny. Pole `sn` pozostaje puste i jest pomijane w PHP; numer można wpisać ręcznie w edytorze podzespołów.
 
 Nieznany model uruchamia interaktywny kreator wpisu. Skrypt automatycznie uzupełnia nazwę modelu, awaryjny opis płyty, wykrytą konfigurację pamięci i typ urządzenia. Użytkownik podaje zweryfikowaną maksymalną pojemność RAM, `powerMaxW`, `powerW` oraz `other`, a wpis trafia do JSON-u dopiero po pokazaniu podsumowania i zatwierdzeniu. Jeśli bazy nie można zapisać lub jest niepoprawna, nadal można poprawić ją ręcznie i wczytać ponownie bez rozpoczynania pracy od początku.
 
@@ -112,7 +114,7 @@ Odczyt zainstalowanych modułów RAM jest niezależny od ustalania konfiguracji 
 
 Przy dodawaniu nieznanego modelu `baseboardFallback` otrzymuje nazwę komputera, a `deviceType` jest pobierany z jednoznacznego wyniku `Win32_SystemEnclosure.ChassisTypes`. Jeśli typu nie można ustalić, skrypt prosi o jego wybór. Maksymalna pojemność w `memorySpec` zawsze wymaga ręcznego potwierdzenia na podstawie dokumentacji producenta; wartość `MaxCapacity`/`MaxCapacityEx` z SMBIOS nie jest używana jako limit konkretnego modelu.
 
-Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on board'` i poprawnym numerem seryjnym. Rekordy pamięci lutowanej są grupowane w jeden wpis z `conn'=>'soldered'`. Wartości zastępcze, takie jak `00000000`, nie trafiają do `sn`.
+Moduły wymienne są zapisywane osobno jako `16GB 3200MHz DDR4`, z `conn'=>'on board'`. Rekordy pamięci lutowanej są grupowane w jeden wpis z `conn'=>'soldered'`. Automatycznie wykryte moduły mają puste `sn`, niezależnie od numeru zwróconego przez SMBIOS.
 
 ## Walidacja danych ręcznych
 
